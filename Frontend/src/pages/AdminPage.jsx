@@ -1,14 +1,19 @@
 import React, { useEffect, useState } from "react";
+import {
+  fetchSessionsApi,
+  createSessionApi,
+  deleteSessionApi,
+} from "../api/api"; // adjust path if needed
 
 const AdminPage = () => {
   const [slots, setSlots] = useState([]);
   const [time, setTime] = useState("");
 
-  // Fetch slots
+  /* ================= Fetch Slots ================= */
+
   const fetchSlots = async () => {
     try {
-      const res = await fetch("/api/sessions");
-      const data = await res.json();
+      const data = await fetchSessionsApi();
       setSlots(data);
     } catch (err) {
       console.error(err);
@@ -19,18 +24,13 @@ const AdminPage = () => {
     fetchSlots();
   }, []);
 
-  // Add slot
+  /* ================= Add Slot ================= */
+
   const handleAddSlot = async () => {
     if (!time) return alert("Enter slot time");
 
     try {
-      await fetch("/api/sessions", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ time }),
-      });
+      await createSessionApi({ time });
 
       setTime("");
       fetchSlots();
@@ -39,15 +39,13 @@ const AdminPage = () => {
     }
   };
 
-  // Delete slot
+  /* ================= Delete Slot ================= */
+
   const handleDelete = async (id) => {
     if (!window.confirm("Delete this slot?")) return;
 
     try {
-      await fetch(`/api/sessions/${id}`, {
-        method: "DELETE",
-      });
-
+      await deleteSessionApi(id);
       fetchSlots();
     } catch (err) {
       console.error(err);
