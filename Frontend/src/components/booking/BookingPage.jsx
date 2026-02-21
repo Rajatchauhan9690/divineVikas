@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
 import SeatGrid from "./SeatGrid";
 import {
@@ -9,58 +9,115 @@ import {
   unlockSeatApi,
 } from "../../api/api";
 
+/* ---------- Date Utils ---------- */
+
+const formatLocalDate = (date) => {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+
+  return `${y}-${m}-${d}`;
+};
+
+const getDateLimits = () => {
+  const today = new Date();
+  const max = new Date();
+  max.setDate(today.getDate() + 2);
+
+  return {
+    minDate: formatLocalDate(today),
+    maxDate: formatLocalDate(max),
+  };
+};
+
+/* ---------- Component ---------- */
+
 const BookingPage = () => {
   const navigate = useNavigate();
 
-  const [sessions, setSessions] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(
-    new Date().toISOString().split("T")[0],
-  );
+  const { minDate, maxDate } = getDateLimits();
 
+  const [sessions, setSessions] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
   const lockedSeatRef = useRef(null);
   const lockIntervalRef = useRef(null);
 
-  const today = new Date();
-  const minDate = today.toISOString().split("T")[0];
+  /* ---------- Session Loader ---------- */
 
-  const maxDateObj = new Date();
-  maxDateObj.setDate(today.getDate() + 2);
-  const maxDate = maxDateObj.toISOString().split("T")[0];
-
-  /* Load Sessions */
-
-  const loadSessions = async () => {
+  const loadSessions = useCallback(async (dateValue) => {
     try {
-      const data = await adminGetSessionsApi();
+      const response = await adminGetSessionsApi();
 
-      const filtered = data.filter((session) => session.date === selectedDate);
+      let finalDate = dateValue;
 
-      setSessions(filtered);
+      const hasCurrentDateSession = response.some((s) => s.date === dateValue);
 
-      if (filtered.length > 0) {
-        setSelectedSession(filtered[0]);
-      } else {
-        setSelectedSession(null);
+      if (!hasCurrentDateSession) {
+        for (let i = 0; i <= 2; i++) {
+          const check = new Date();
+          check.setDate(check.getDate() + i);
+
+          const formatted = formatLocalDate(check);
+
+          if (response.some((s) => s.date === formatted)) {
+            finalDate = formatted;
+            break;
+          }
+        }
       }
 
+      setSelectedDate(finalDate);
+
+      const filtered = response.filter((s) => s.date === finalDate);
+
+      setSessions(filtered);
+      setSelectedSession(filtered[0] || null);
       setSelectedSeat(null);
       lockedSeatRef.current = null;
     } catch {
       toast.error("Failed to load sessions");
     }
-  };
+  }, []);
 
   useEffect(() => {
-    loadSessions();
-  }, [selectedDate]);
+    loadSessions(selectedDate);
+  }, [selectedDate, loadSessions]);
 
-  /* Lock Refresh */
+  /* ---------- Socket Sync (Single Registration) ---------- */
 
-  const startLockRefresh = () => {
-    if (lockIntervalRef.current) clearInterval(lockIntervalRef.current);
+  useEffect(() => {
+    if (!selectedSession) return;
+
+    const socket = window.socket;
+    if (!socket) return;
+
+    const sessionId = selectedSession._id;
+
+    socket.emit("joinSession", sessionId);
+
+    const handleSeatUpdate = async () => {
+      try {
+        const response = await adminGetSessionsApi();
+        setSessions(response.filter((s) => s.date === selectedDate));
+      } catch {}
+    };
+
+    socket.on("seat-updated", handleSeatUpdate);
+
+    return () => {
+      socket.off("seat-updated", handleSeatUpdate);
+    };
+  }, [selectedSession, selectedDate]);
+
+  /* ---------- Lock Refresh Timer ---------- */
+
+  const startLockRefresh = useCallback(() => {
+    if (lockIntervalRef.current) {
+      clearInterval(lockIntervalRef.current);
+    }
 
     lockIntervalRef.current = setInterval(async () => {
       if (!lockedSeatRef.current || !selectedSession) return;
@@ -70,47 +127,47 @@ const BookingPage = () => {
           sessionId: selectedSession._id,
           seatNumber: lockedSeatRef.current,
         });
-      } catch {
-        console.log("Lock refresh failed");
-      }
+      } catch {}
     }, 250000);
-  };
+  }, [selectedSession]);
 
-  /* Seat Selection */
+  /* ---------- Seat Selection ---------- */
 
-  const handleSeatSelect = async (seatNumber) => {
-    try {
-      if (!selectedSession) return;
+  const handleSeatSelect = useCallback(
+    async (seatNumber) => {
+      try {
+        if (!selectedSession) return;
 
-      if (lockedSeatRef.current && lockedSeatRef.current !== seatNumber) {
-        await unlockSeatApi({
+        if (lockedSeatRef.current && lockedSeatRef.current !== seatNumber) {
+          await unlockSeatApi({
+            sessionId: selectedSession._id,
+            seatNumber: lockedSeatRef.current,
+          });
+        }
+
+        setSelectedSeat(seatNumber);
+        lockedSeatRef.current = seatNumber;
+
+        await lockSeatApi({
           sessionId: selectedSession._id,
-          seatNumber: lockedSeatRef.current,
+          seatNumber,
         });
+
+        startLockRefresh();
+      } catch {
+        toast.error("Seat lock failed");
+        setSelectedSeat(null);
+        lockedSeatRef.current = null;
       }
+    },
+    [selectedSession, startLockRefresh],
+  );
 
-      setSelectedSeat(seatNumber);
-      lockedSeatRef.current = seatNumber;
+  /* ---------- Confirm Booking ---------- */
 
-      await lockSeatApi({
-        sessionId: selectedSession._id,
-        seatNumber,
-      });
-
-      startLockRefresh();
-    } catch {
-      toast.error("Seat lock failed");
-      setSelectedSeat(null);
-      lockedSeatRef.current = null;
-    }
-  };
-
-  /* Booking Confirm */
-
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     try {
       if (!selectedSession) return toast.error("Select a slot");
-
       if (!selectedSeat) return toast.error("Select a seat");
 
       await bookSeatApi({
@@ -132,32 +189,15 @@ const BookingPage = () => {
     } catch {
       toast.error("Booking failed");
     }
-  };
+  }, [selectedSession, selectedSeat, selectedDate, navigate]);
 
-  /* Socket Sync */
-
-  useEffect(() => {
-    if (!selectedSession) return;
-
-    const socket = window.socket;
-    if (!socket) return;
-
-    socket.emit("joinSession", selectedSession._id);
-
-    const handler = () => loadSessions();
-
-    socket.on("seat-updated", handler);
-
-    return () => {
-      socket.off("seat-updated", handler);
-    };
-  }, [selectedSession]);
+  /* ---------- Render ---------- */
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar */}
-        <div className="w-full md:w-72 bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)] rounded-xl p-4 sticky top-4 h-fit">
+        <div className="w-full md:w-72 bg-white shadow rounded-xl p-4 sticky top-4 h-fit">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -178,8 +218,7 @@ const BookingPage = () => {
               <button
                 key={session._id}
                 onClick={() => setSelectedSession(session)}
-                className={`min-w-[140px] md:w-full border rounded-lg p-3 transition
-                ${
+                className={`min-w-[140px] md:w-full border rounded-lg p-3 transition ${
                   selectedSession?._id === session._id
                     ? "bg-green-500 text-white"
                     : "bg-white hover:bg-green-50"
@@ -192,7 +231,7 @@ const BookingPage = () => {
         </div>
 
         {/* Seat Area */}
-        <div className="flex-1 bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)] rounded-xl p-4 md:p-6">
+        <div className="flex-1 bg-white shadow rounded-xl p-4 md:p-6">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots

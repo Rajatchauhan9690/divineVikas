@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import {
   adminCreateSessionApi,
   adminGetSessionsApi,
@@ -9,9 +9,35 @@ import {
 import { ToastContainer, toast } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
+/* ================= DATE HELPERS ================= */
+
+const getLocalToday = () => {
+  const today = new Date();
+  return new Date(today.getTime() - today.getTimezoneOffset() * 60000)
+    .toISOString()
+    .split("T")[0];
+};
+
+const TODAY_MIN_DATE = getLocalToday();
+
+const formatDate = (dateString) => {
+  if (!dateString) return "";
+
+  return new Date(dateString).toLocaleDateString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const formatTime = (timeString) => {
+  return timeString ? timeString.toUpperCase().trim() : "";
+};
+
+/* ================= COMPONENT ================= */
+
 const AdminPage = () => {
   const [slots, setSlots] = useState([]);
-  const [filteredSlots, setFilteredSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
 
   const [form, setForm] = useState({
@@ -30,36 +56,12 @@ const AdminPage = () => {
 
   const [deleteId, setDeleteId] = useState(null);
 
-  const isFormValid =
-    form.name && form.date && timeValue && form.totalSeats && period;
+  /* ================= VALIDATION ================= */
 
-  /* ================= FORMAT HELPERS ================= */
-
-  const formatDate = (dateString) => {
-    if (!dateString) return "";
-
-    return new Date(dateString).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const formatHeadingDate = (dateString) => {
-    if (!dateString) return "";
-
-    return new Date(dateString).toLocaleDateString("en-GB", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-    });
-  };
-
-  const formatTime = (timeString) => {
-    if (!timeString) return "";
-
-    return timeString.toUpperCase().trim();
-  };
+  const isFormValid = useMemo(
+    () => form.name && form.date && timeValue && form.totalSeats && period,
+    [form, timeValue, period],
+  );
 
   /* ================= FETCH DATA ================= */
 
@@ -72,70 +74,57 @@ const AdminPage = () => {
     }
   };
 
-  useEffect(() => {
-    fetchSlots();
-  }, []);
-  /* ================= Admin Booking  ================= */
   const fetchBookings = async () => {
     try {
       const res = await adminGetAllBookingsApi();
-
-      console.log("Bookings Response:", res); // ✅ Print response in console
       setBookings(res || []);
     } catch (err) {
       console.error(err);
     }
   };
-  useEffect(() => {
-    fetchBookings();
-  }, []);
-  /* ================= Select the future dates only ================= */
-  const getTodayDate = () => {
-    return new Date().toISOString().split("T")[0];
-  };
-  /* ================= HISTORY FILTER ================= */
 
   useEffect(() => {
+    fetchSlots();
+    fetchBookings();
+  }, []);
+
+  /* ================= HISTORY FILTERED SLOTS ================= */
+
+  const filteredSlots = useMemo(() => {
     const sortedSessions = [...slots].sort(
       (a, b) => new Date(b.date) - new Date(a.date),
     );
 
-    let displaySessions = sortedSessions;
+    let display = sortedSessions;
 
     if (historyFilter.from || historyFilter.to) {
-      displaySessions = sortedSessions.filter((slot) => {
+      const fromDate = historyFilter.from ? new Date(historyFilter.from) : null;
+
+      const toDate = historyFilter.to ? new Date(historyFilter.to) : null;
+
+      display = sortedSessions.filter((slot) => {
         const slotDate = new Date(slot.date);
-
-        const fromDate = historyFilter.from
-          ? new Date(historyFilter.from)
-          : null;
-
-        const toDate = historyFilter.to ? new Date(historyFilter.to) : null;
 
         if (fromDate && slotDate < fromDate) return false;
         if (toDate && slotDate > toDate) return false;
 
         return true;
       });
-
-      displaySessions = displaySessions.slice(0, 5);
-    } else {
-      displaySessions = sortedSessions.slice(0, 5);
     }
 
-    setFilteredSlots(displaySessions);
+    return display.slice(0, 5);
   }, [slots, historyFilter]);
 
-  /* ================= FORM CHANGE ================= */
+  /* ================= FORM HANDLERS ================= */
 
   const handleChange = (e) => {
-    setForm({
-      ...form,
+    setForm((prev) => ({
+      ...prev,
       [e.target.name]: e.target.value,
-    });
+    }));
   };
 
-  /* ================= TIME AUTO FORMAT ================= */
+  /* ================= TIME FORMATTER ================= */
 
   const handleTimeChange = (e) => {
     let value = e.target.value.replace(/[^0-9]/g, "");
@@ -151,27 +140,24 @@ const AdminPage = () => {
     if (hour) {
       const hourNum = Number(hour);
 
-      // 24-hour format detection
       if (hour.length === 2 && (hourNum === 0 || hourNum > 12)) {
         toast.error("Please enter time in 12-hour format (01-12)");
         return;
       }
     }
 
-    if (minute) {
-      if (Number(minute) > 59) {
-        toast.error("Invalid minute value");
-        return;
-      }
+    if (minute && Number(minute) > 59) {
+      toast.error("Invalid minute value");
+      return;
     }
 
     setTimeValue(value);
   };
 
-  /* ================= CREATE SESSION ================= */
+  /* ================= SESSION ACTIONS ================= */
 
   const handleAddSlot = async () => {
-    if (!form.name || !form.date || !timeValue || !form.totalSeats) {
+    if (!isFormValid) {
       return toast.error("Please fill all fields");
     }
 
@@ -196,13 +182,10 @@ const AdminPage = () => {
       setPeriod("AM");
 
       fetchSlots();
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Failed to create session");
     }
   };
-
-  /* ================= DELETE SESSION ================= */
 
   const handleDelete = async () => {
     if (!deleteId) return;
@@ -214,11 +197,12 @@ const AdminPage = () => {
 
       fetchSlots();
       setDeleteId(null);
-    } catch (err) {
-      console.error(err);
+    } catch {
       toast.error("Delete failed");
     }
   };
+
+  /* ================= UI ================= */
 
   return (
     <div className="max-w-6xl mx-auto p-4 md:p-6">
@@ -226,7 +210,7 @@ const AdminPage = () => {
         Admin Session Management
       </h1>
 
-      {/* FORM */}
+      {/* Form Section */}
       <div className="bg-white shadow-md rounded-xl p-4 md:p-6 mb-10 w-full md:w-[80%] mx-auto space-y-4">
         <h2 className="text-xl font-semibold">Create New Session</h2>
 
@@ -243,12 +227,11 @@ const AdminPage = () => {
             type="date"
             name="date"
             value={form.date}
-            min={getTodayDate()}
+            min={TODAY_MIN_DATE}
             onChange={handleChange}
             className="border p-3 rounded-lg w-full"
           />
 
-          {/* Time Picker */}
           <div className="flex gap-2 w-full">
             <input
               value={timeValue}
@@ -293,7 +276,7 @@ const AdminPage = () => {
         </div>
       </div>
 
-      {/* HISTORY FILTER */}
+      {/* History Filter */}
       <div className="bg-blue-50 p-4 rounded-lg border mb-6 w-full md:w-[80%] mx-auto">
         <h2 className="font-semibold text-blue-700 mb-3">Filter History</h2>
 
@@ -302,7 +285,10 @@ const AdminPage = () => {
             type="date"
             value={historyFilter.from}
             onChange={(e) =>
-              setHistoryFilter({ ...historyFilter, from: e.target.value })
+              setHistoryFilter((prev) => ({
+                ...prev,
+                from: e.target.value,
+              }))
             }
             className="border p-2 rounded w-full"
           />
@@ -311,7 +297,10 @@ const AdminPage = () => {
             type="date"
             value={historyFilter.to}
             onChange={(e) =>
-              setHistoryFilter({ ...historyFilter, to: e.target.value })
+              setHistoryFilter((prev) => ({
+                ...prev,
+                to: e.target.value,
+              }))
             }
             className="border p-2 rounded w-full"
           />
@@ -325,11 +314,13 @@ const AdminPage = () => {
         </div>
       </div>
 
-      {/* HISTORY LIST */}
+      {/* History List */}
       <div className="bg-white shadow-md rounded-xl p-4 md:p-6 w-full md:w-[80%] mx-auto">
         <h2 className="text-xl font-semibold mb-6">
           {historyFilter.from || historyFilter.to
-            ? `Session History (${formatHeadingDate(historyFilter.from || "Starting Date")} → ${formatHeadingDate(historyFilter.to || "Ending Date")} Slots)`
+            ? `Session History (${formatDate(
+                historyFilter.from || "Starting Date",
+              )} → ${formatDate(historyFilter.to || "Ending Date")} Slots)`
             : "Session History (Latest 5 Default)"}
         </h2>
 
@@ -348,11 +339,8 @@ const AdminPage = () => {
                 </button>
 
                 <p className="font-semibold">{slot.name}</p>
-
                 <p className="text-sm">Date: {formatDate(slot.date)}</p>
-
                 <p className="text-sm">Time: {formatTime(slot.time)}</p>
-
                 <p className="text-sm">Seats: {slot.totalSeats}</p>
               </div>
             ))
@@ -363,14 +351,67 @@ const AdminPage = () => {
           )}
         </div>
       </div>
-      <div className="bg-white shadow-md rounded-xl p-4 md:p-6 w-full md:w-[80%] mx-auto mt-8">
-        <h2 className="text-xl font-semibold mb-4">All Bookings</h2>
 
-        <pre className="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
-          {JSON.stringify(bookings, null, 2)}
-        </pre>
+      {/* Bookings */}
+      <div className="bg-white shadow-md rounded-xl p-4 md:p-6 w-full md:w-[90%] mx-auto mt-8">
+        <h2 className="text-xl font-semibold mb-6">All Bookings</h2>
+
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {bookings.length > 0 ? (
+            bookings.map((booking) => (
+              <div
+                key={booking._id}
+                className="border rounded-xl p-5 shadow hover:shadow-lg transition"
+              >
+                <p className="text-lg font-semibold mb-2">
+                  {booking.userName || "N/A"}
+                </p>
+
+                <div className="text-sm text-gray-600 space-y-1">
+                  <p>
+                    <span className="font-medium">Email:</span>{" "}
+                    {booking.email || "N/A"}
+                  </p>
+
+                  <p>
+                    <span className="font-medium">Seat No:</span>{" "}
+                    {booking.seatNumber}
+                  </p>
+
+                  <p>
+                    <span className="font-medium">Booking Date:</span>{" "}
+                    {booking.createdAt
+                      ? new Date(booking.createdAt).toLocaleDateString()
+                      : "N/A"}
+                  </p>
+
+                  {booking.session && (
+                    <>
+                      <p>
+                        <span className="font-medium">Slot Date:</span>{" "}
+                        {booking.session.date}
+                      </p>
+
+                      <p>
+                        <span className="font-medium">Slot Time:</span>{" "}
+                        {booking.session.time}
+                      </p>
+
+                      <p>
+                        <span className="font-medium">Session Name:</span>{" "}
+                        {booking.session.name}
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))
+          ) : (
+            <p className="text-gray-500">No bookings found</p>
+          )}
+        </div>
       </div>
-      {/* DELETE CONFIRM MODAL */}
+
       {deleteId && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
           <div className="bg-white p-6 rounded-xl shadow-lg text-center space-y-4 w-full max-w-sm">

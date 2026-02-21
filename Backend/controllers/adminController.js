@@ -66,7 +66,7 @@ export const getSingleSession = async (req, res) => {
 
 export const getAllBookings = async (req, res) => {
   try {
-    const bookings = await Booking.find().populate("sessionId");
+    const bookings = await Booking.find().populate("session");
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: error.message });
