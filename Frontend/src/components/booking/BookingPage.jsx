@@ -1,8 +1,13 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { toast } from "react-toastify";
 import SeatGrid from "./SeatGrid";
-import { adminGetSessionsApi } from "../../api/api";
+import {
+  adminGetSessionsApi,
+  bookSeatApi,
+  lockSeatApi,
+  unlockSeatApi,
+} from "../../api/api";
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -11,10 +16,13 @@ const BookingPage = () => {
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().split("T")[0],
   );
+
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
-  /* Date Restriction */
+  const lockedSeatRef = useRef(null);
+  const lockIntervalRef = useRef(null);
+
   const today = new Date();
   const minDate = today.toISOString().split("T")[0];
 
@@ -22,13 +30,12 @@ const BookingPage = () => {
   maxDateObj.setDate(today.getDate() + 2);
   const maxDate = maxDateObj.toISOString().split("T")[0];
 
-  /* Fetch sessions from backend */
+  /* Load Sessions */
 
   const loadSessions = async () => {
     try {
       const data = await adminGetSessionsApi();
 
-      // Filter sessions by selected date
       const filtered = data.filter((session) => session.date === selectedDate);
 
       setSessions(filtered);
@@ -40,7 +47,8 @@ const BookingPage = () => {
       }
 
       setSelectedSeat(null);
-    } catch (error) {
+      lockedSeatRef.current = null;
+    } catch {
       toast.error("Failed to load sessions");
     }
   };
@@ -49,30 +57,101 @@ const BookingPage = () => {
     loadSessions();
   }, [selectedDate]);
 
-  /* Handlers */
+  /* Lock Refresh */
 
-  const handleSlotSelect = (session) => {
-    setSelectedSession(session);
-    setSelectedSeat(null);
+  const startLockRefresh = () => {
+    if (lockIntervalRef.current) clearInterval(lockIntervalRef.current);
+
+    lockIntervalRef.current = setInterval(async () => {
+      if (!lockedSeatRef.current || !selectedSession) return;
+
+      try {
+        await lockSeatApi({
+          sessionId: selectedSession._id,
+          seatNumber: lockedSeatRef.current,
+        });
+      } catch {
+        console.log("Lock refresh failed");
+      }
+    }, 250000);
   };
 
-  const handleSeatSelect = (seatNumber) => {
-    setSelectedSeat(seatNumber);
-  };
+  /* Seat Selection */
 
-  const handleConfirm = () => {
-    if (!selectedSession) return toast.error("Select a slot");
-    if (!selectedSeat) return toast.error("Select a seat");
-    toast.success("Booking confirmed");
-    navigate("/checkout", {
-      state: {
+  const handleSeatSelect = async (seatNumber) => {
+    try {
+      if (!selectedSession) return;
+
+      if (lockedSeatRef.current && lockedSeatRef.current !== seatNumber) {
+        await unlockSeatApi({
+          sessionId: selectedSession._id,
+          seatNumber: lockedSeatRef.current,
+        });
+      }
+
+      setSelectedSeat(seatNumber);
+      lockedSeatRef.current = seatNumber;
+
+      await lockSeatApi({
         sessionId: selectedSession._id,
-        date: selectedDate,
-        time: selectedSession.time,
-        seatNumber: selectedSeat,
-      },
-    });
+        seatNumber,
+      });
+
+      startLockRefresh();
+    } catch {
+      toast.error("Seat lock failed");
+      setSelectedSeat(null);
+      lockedSeatRef.current = null;
+    }
   };
+
+  /* Booking Confirm */
+
+  const handleConfirm = async () => {
+    try {
+      if (!selectedSession) return toast.error("Select a slot");
+
+      if (!selectedSeat) return toast.error("Select a seat");
+
+      await bookSeatApi({
+        sessionId: selectedSession._id,
+        seatNumber: selectedSeat,
+        userName: "Guest User",
+      });
+
+      toast.success("Booking confirmed");
+
+      navigate("/checkout", {
+        state: {
+          sessionId: selectedSession._id,
+          date: selectedDate,
+          time: selectedSession.time,
+          seatNumber: selectedSeat,
+        },
+      });
+    } catch {
+      toast.error("Booking failed");
+    }
+  };
+
+  /* Socket Sync */
+
+  useEffect(() => {
+    if (!selectedSession) return;
+
+    const socket = window.socket;
+    if (!socket) return;
+
+    socket.emit("joinSession", selectedSession._id);
+
+    const handler = () => loadSessions();
+
+    socket.on("seat-updated", handler);
+
+    return () => {
+      socket.off("seat-updated", handler);
+    };
+  }, [selectedSession]);
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
@@ -94,12 +173,12 @@ const BookingPage = () => {
             Meditation Slots
           </h3>
 
-          <div className="flex flex-row md:flex-col gap-3 overflow-x-auto md:overflow-visible pb-2">
+          <div className="flex flex-row md:flex-col gap-3 overflow-x-auto">
             {sessions.map((session) => (
               <button
                 key={session._id}
-                onClick={() => handleSlotSelect(session)}
-                className={`min-w-[140px] md:w-full border rounded-lg p-3
+                onClick={() => setSelectedSession(session)}
+                className={`min-w-[140px] md:w-full border rounded-lg p-3 transition
                 ${
                   selectedSession?._id === session._id
                     ? "bg-green-500 text-white"
@@ -122,7 +201,9 @@ const BookingPage = () => {
             <>
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold">Select Your Seat</h2>
+
                 <p className="text-gray-500 mt-2">Date: {selectedDate}</p>
+
                 <p className="text-gray-500 mt-1">
                   Slot Time: {selectedSession.time}
                 </p>
@@ -131,6 +212,7 @@ const BookingPage = () => {
               <SeatGrid
                 totalSeats={selectedSession.totalSeats}
                 bookedSeats={selectedSession.bookedSeats}
+                lockedSeats={selectedSession.lockedSeats}
                 selectedSeat={selectedSeat}
                 onSeatSelect={handleSeatSelect}
               />

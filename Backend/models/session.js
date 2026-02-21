@@ -2,13 +2,11 @@ import mongoose from "mongoose";
 
 const lockedSeatSchema = new mongoose.Schema(
   {
-    seatNumber: {
-      type: Number,
-      required: true,
-    },
+    seatNumber: Number,
     lockedAt: {
       type: Date,
       default: Date.now,
+      expires: 300, // 5 minutes auto delete
     },
   },
   { _id: false },
@@ -35,6 +33,12 @@ const sessionSchema = new mongoose.Schema(
     totalSeats: {
       type: Number,
       required: true,
+    },
+
+    status: {
+      type: String,
+      enum: ["available", "locked", "booked", "selected"],
+      default: "available",
     },
 
     bookedSeats: {

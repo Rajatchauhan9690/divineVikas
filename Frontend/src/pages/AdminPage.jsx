@@ -3,6 +3,7 @@ import {
   adminCreateSessionApi,
   adminGetSessionsApi,
   adminDeleteSessionApi,
+  adminGetAllBookingsApi,
 } from "../api/api";
 
 import { ToastContainer, toast } from "react-toastify";
@@ -11,6 +12,7 @@ import "react-toastify/dist/ReactToastify.css";
 const AdminPage = () => {
   const [slots, setSlots] = useState([]);
   const [filteredSlots, setFilteredSlots] = useState([]);
+  const [bookings, setBookings] = useState([]);
 
   const [form, setForm] = useState({
     name: "",
@@ -73,7 +75,24 @@ const AdminPage = () => {
   useEffect(() => {
     fetchSlots();
   }, []);
+  /* ================= Admin Booking  ================= */
+  const fetchBookings = async () => {
+    try {
+      const res = await adminGetAllBookingsApi();
 
+      console.log("Bookings Response:", res); // ✅ Print response in console
+      setBookings(res || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+  useEffect(() => {
+    fetchBookings();
+  }, []);
+  /* ================= Select the future dates only ================= */
+  const getTodayDate = () => {
+    return new Date().toISOString().split("T")[0];
+  };
   /* ================= HISTORY FILTER ================= */
 
   useEffect(() => {
@@ -224,6 +243,7 @@ const AdminPage = () => {
             type="date"
             name="date"
             value={form.date}
+            min={getTodayDate()}
             onChange={handleChange}
             className="border p-3 rounded-lg w-full"
           />
@@ -343,7 +363,13 @@ const AdminPage = () => {
           )}
         </div>
       </div>
+      <div className="bg-white shadow-md rounded-xl p-4 md:p-6 w-full md:w-[80%] mx-auto mt-8">
+        <h2 className="text-xl font-semibold mb-4">All Bookings</h2>
 
+        <pre className="bg-gray-100 p-4 rounded-lg overflow-auto text-sm">
+          {JSON.stringify(bookings, null, 2)}
+        </pre>
+      </div>
       {/* DELETE CONFIRM MODAL */}
       {deleteId && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
