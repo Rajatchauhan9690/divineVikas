@@ -5,29 +5,6 @@ const API = axios.create({
 });
 
 /* =====================================================
-   SESSION APIs
-   Base: /api/sessions
-===================================================== */
-
-// Create session
-export const createSessionApi = async (data) => {
-  const res = await API.post("/api/sessions", data);
-  return res.data;
-};
-
-// Get all sessions
-export const fetchSessionsApi = async () => {
-  const res = await API.get("/api/sessions");
-  return res.data;
-};
-
-// Get single session
-export const fetchSingleSessionApi = async (id) => {
-  const res = await API.get(`/api/sessions/${id}`);
-  return res.data;
-};
-
-/* =====================================================
    BOOKING APIs
    Base: /api/bookings
 ===================================================== */
@@ -84,16 +61,20 @@ export const adminDeleteSessionApi = async (id) => {
   return res.data;
 };
 
-// Get all bookings (Admin)
-export const adminGetAllBookingsApi = async () => {
-  const res = await API.get("/api/admin/bookings");
-  return res.data;
-};
-
 // Get admin sessions
 export const adminGetSessionsApi = async () => {
   const res = await API.get("/api/admin/sessions");
   return res.data;
 };
+// Get admin single session
+export const adminGetSingleSessionApi = async (id) => {
+  const res = await API.get(`/api/admin/session/${id}`);
+  return res.data;
+};
 
+// Get all bookings (Admin)
+export const adminGetAllBookingsApi = async () => {
+  const res = await API.get("/api/admin/bookings");
+  return res.data;
+};
 export default API;

@@ -1,15 +1,15 @@
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 
-import Hero from "./components/Hero";
-import Testimonial from "./components/Testimonial";
-import FAQ from "./components/FAQ";
-import WorkShop from "./components/WorkShop";
-import TransForm from "./components/Transform";
-import LifeWorkshop from "./components/LifeWorkshop";
-import Personal from "./components/Personal";
-import LifeSection from "./components/LifeSection";
-import StickyOffer from "./components/StickyOffer";
-import Checkout from "./components/Checkout";
+import Hero from "./pages/Hero";
+import Testimonial from "./pages/Testimonial";
+import FAQ from "./pages/FAQ";
+import WorkShop from "./pages/WorkShop";
+import TransForm from "./pages/Transform";
+import LifeWorkshop from "./pages/LifeWorkshop";
+import Personal from "./pages/Personal";
+import LifeSection from "./pages/LifeSection";
+import StickyOffer from "./pages/StickyOffer";
+import Checkout from "./pages/Checkout";
 
 /* Booking System Pages */
 import BookingPage from "./components/booking/BookingPage";

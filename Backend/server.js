@@ -4,7 +4,6 @@ import cors from "cors";
 import http from "http";
 
 import connectDB from "./config/db.js";
-import sessionRoutes from "./routes/sessionRoutes.js";
 import bookingRoutes from "./routes/bookingRoutes.js";
 import paymentRoutes from "./routes/paymentRoutes.js";
 import adminRoutes from "./routes/adminRoutes.js";
@@ -23,7 +22,6 @@ app.use(
 );
 app.use(express.json());
 
-app.use("/api/sessions", sessionRoutes);
 app.use("/api/bookings", bookingRoutes);
 app.use("/api/payment", paymentRoutes);
 app.use("/api/admin", adminRoutes);

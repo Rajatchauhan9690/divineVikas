@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import SeatGrid from "./SeatGrid";
-import { fetchSessionsApi } from "../../api/api";
+import { adminGetSessionsApi } from "../../api/api";
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -26,7 +26,7 @@ const BookingPage = () => {
 
   const loadSessions = async () => {
     try {
-      const data = await fetchSessionsApi();
+      const data = await adminGetSessionsApi();
 
       // Filter sessions by selected date
       const filtered = data.filter((session) => session.date === selectedDate);

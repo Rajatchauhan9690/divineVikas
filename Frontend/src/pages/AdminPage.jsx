@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import {
-  fetchSessionsApi,
-  createSessionApi,
+  adminCreateSessionApi,
+  adminGetSessionsApi,
   adminDeleteSessionApi,
 } from "../api/api";
 
@@ -63,7 +63,7 @@ const AdminPage = () => {
 
   const fetchSlots = async () => {
     try {
-      const data = await fetchSessionsApi();
+      const data = await adminGetSessionsApi();
       setSlots(data || []);
     } catch (err) {
       console.error(err);
@@ -157,7 +157,7 @@ const AdminPage = () => {
     }
 
     try {
-      await createSessionApi({
+      await adminCreateSessionApi({
         ...form,
         time: `${timeValue} ${period}`,
         totalSeats: Number(form.totalSeats),
