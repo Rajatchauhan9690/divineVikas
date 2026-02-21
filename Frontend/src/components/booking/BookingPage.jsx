@@ -1,7 +1,9 @@
 import { useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
+
 import SeatGrid from "./SeatGrid";
+
 import {
   adminGetSessionsApi,
   bookSeatApi,
@@ -9,28 +11,8 @@ import {
   unlockSeatApi,
 } from "../../api/api";
 
-/* ---------- Date Utils ---------- */
-
-const formatLocalDate = (date) => {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, "0");
-  const d = String(date.getDate()).padStart(2, "0");
-
-  return `${y}-${m}-${d}`;
-};
-
-const getDateLimits = () => {
-  const today = new Date();
-  const max = new Date();
-  max.setDate(today.getDate() + 2);
-
-  return {
-    minDate: formatLocalDate(today),
-    maxDate: formatLocalDate(max),
-  };
-};
-
-/* ---------- Component ---------- */
+import { getDateLimits, getTodayDate } from "../../utils/dateUtils";
+import useAutoDateSync from "../../hooks/useAutoDateSync";
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -38,43 +20,28 @@ const BookingPage = () => {
   const { minDate, maxDate } = getDateLimits();
 
   const [sessions, setSessions] = useState([]);
-  const [selectedDate, setSelectedDate] = useState(formatLocalDate(new Date()));
+
+  const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
   const lockedSeatRef = useRef(null);
   const lockIntervalRef = useRef(null);
 
-  /* ---------- Session Loader ---------- */
+  /* ⭐ Auto Date Sync Hook */
+  useAutoDateSync(setSelectedDate);
+
+  /* ---------- Load Sessions ---------- */
 
   const loadSessions = useCallback(async (dateValue) => {
     try {
       const response = await adminGetSessionsApi();
 
-      let finalDate = dateValue;
-
-      const hasCurrentDateSession = response.some((s) => s.date === dateValue);
-
-      if (!hasCurrentDateSession) {
-        for (let i = 0; i <= 2; i++) {
-          const check = new Date();
-          check.setDate(check.getDate() + i);
-
-          const formatted = formatLocalDate(check);
-
-          if (response.some((s) => s.date === formatted)) {
-            finalDate = formatted;
-            break;
-          }
-        }
-      }
-
-      setSelectedDate(finalDate);
-
-      const filtered = response.filter((s) => s.date === finalDate);
+      const filtered = response.filter((s) => s.date === dateValue);
 
       setSessions(filtered);
       setSelectedSession(filtered[0] || null);
+
       setSelectedSeat(null);
       lockedSeatRef.current = null;
     } catch {
@@ -86,7 +53,7 @@ const BookingPage = () => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
 
-  /* ---------- Socket Sync (Single Registration) ---------- */
+  /* ---------- Socket Sync ---------- */
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -94,9 +61,7 @@ const BookingPage = () => {
     const socket = window.socket;
     if (!socket) return;
 
-    const sessionId = selectedSession._id;
-
-    socket.emit("joinSession", sessionId);
+    socket.emit("joinSession", selectedSession._id);
 
     const handleSeatUpdate = async () => {
       try {
@@ -107,17 +72,13 @@ const BookingPage = () => {
 
     socket.on("seat-updated", handleSeatUpdate);
 
-    return () => {
-      socket.off("seat-updated", handleSeatUpdate);
-    };
+    return () => socket.off("seat-updated", handleSeatUpdate);
   }, [selectedSession, selectedDate]);
 
-  /* ---------- Lock Refresh Timer ---------- */
+  /* ---------- Lock Refresh ---------- */
 
   const startLockRefresh = useCallback(() => {
-    if (lockIntervalRef.current) {
-      clearInterval(lockIntervalRef.current);
-    }
+    if (lockIntervalRef.current) clearInterval(lockIntervalRef.current);
 
     lockIntervalRef.current = setInterval(async () => {
       if (!lockedSeatRef.current || !selectedSession) return;
@@ -196,7 +157,6 @@ const BookingPage = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       <div className="flex flex-col md:flex-row gap-6">
-        {/* Sidebar */}
         <div className="w-full md:w-72 bg-white shadow rounded-xl p-4 sticky top-4 h-fit">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
@@ -230,7 +190,6 @@ const BookingPage = () => {
           </div>
         </div>
 
-        {/* Seat Area */}
         <div className="flex-1 bg-white shadow rounded-xl p-4 md:p-6">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
