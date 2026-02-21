@@ -2,7 +2,7 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { toast } from "react-toastify";
 import SeatGrid from "./SeatGrid";
-import { fetchSessionsApi } from "../api/api";
+import { fetchSessionsApi } from "../../api/api";
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -63,7 +63,7 @@ const BookingPage = () => {
   const handleConfirm = () => {
     if (!selectedSession) return toast.error("Select a slot");
     if (!selectedSeat) return toast.error("Select a seat");
-
+    toast.success("Booking confirmed");
     navigate("/checkout", {
       state: {
         sessionId: selectedSession._id,
@@ -78,7 +78,7 @@ const BookingPage = () => {
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       <div className="flex flex-col md:flex-row gap-6">
         {/* Sidebar */}
-        <div className="w-full md:w-72 bg-white shadow-md rounded-xl p-4 sticky top-4 h-fit">
+        <div className="w-full md:w-72 bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)] rounded-xl p-4 sticky top-4 h-fit">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -113,7 +113,7 @@ const BookingPage = () => {
         </div>
 
         {/* Seat Area */}
-        <div className="flex-1 bg-white shadow-md rounded-xl p-4 md:p-6">
+        <div className="flex-1 bg-white shadow-[0_0_15px_rgba(0,0,0,0.15)] rounded-xl p-4 md:p-6">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots

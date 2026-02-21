@@ -26,7 +26,18 @@ export const deleteSession = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+/* ===============================
+GET ALL SESSIONS
+================================ */
 
+export const getSessions = async (req, res) => {
+  try {
+    const sessions = await Session.find();
+    res.json(sessions);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
 /* ===============================
    GET ALL BOOKINGS
 ================================ */

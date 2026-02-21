@@ -9,7 +9,7 @@ const API = axios.create({
    Base: /api/sessions
 ===================================================== */
 
-// Create session (Public route in your backend)
+// Create session
 export const createSessionApi = async (data) => {
   const res = await API.post("/api/sessions", data);
   return res.data;
@@ -18,6 +18,12 @@ export const createSessionApi = async (data) => {
 // Get all sessions
 export const fetchSessionsApi = async () => {
   const res = await API.get("/api/sessions");
+  return res.data;
+};
+
+// Get single session
+export const fetchSingleSessionApi = async (id) => {
+  const res = await API.get(`/api/sessions/${id}`);
   return res.data;
 };
 
@@ -66,25 +72,27 @@ export const verifyPaymentApi = async (data) => {
    Base: /api/admin
 ===================================================== */
 
-// Create session (Admin version)
+// Admin create session
 export const adminCreateSessionApi = async (data) => {
   const res = await API.post("/api/admin/session", data);
   return res.data;
 };
-// Create single session
-export const fetchSingleSessionApi = async (id) => {
-  const res = await API.get(`/api/sessions/${id}`);
-  return res.data;
-};
+
 // Delete session
-export const deleteSessionApi = async (id) => {
+export const adminDeleteSessionApi = async (id) => {
   const res = await API.delete(`/api/admin/session/${id}`);
   return res.data;
 };
 
 // Get all bookings (Admin)
-export const fetchAllBookingsApi = async () => {
+export const adminGetAllBookingsApi = async () => {
   const res = await API.get("/api/admin/bookings");
+  return res.data;
+};
+
+// Get admin sessions
+export const adminGetSessionsApi = async () => {
+  const res = await API.get("/api/admin/sessions");
   return res.data;
 };
 

@@ -12,14 +12,20 @@ export const initSocket = (server) => {
   io.on("connection", (socket) => {
     console.log("⚡ User connected:", socket.id);
 
-    socket.on("seatBooked", (data) => {
-      io.emit("seatUpdated", data);
+    socket.on("join-session", (sessionId) => {
+      socket.join(sessionId);
+      console.log(`User joined session: ${sessionId}`);
     });
 
     socket.on("disconnect", () => {
-      console.log("User disconnected");
+      console.log("User disconnected:", socket.id);
     });
   });
 };
 
-export const getIO = () => io;
+export const getIO = () => {
+  if (!io) {
+    throw new Error("Socket.io not initialized");
+  }
+  return io;
+};

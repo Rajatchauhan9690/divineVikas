@@ -2,20 +2,27 @@ import mongoose from "mongoose";
 
 const bookingSchema = new mongoose.Schema(
   {
-    sessionId: {
+    session: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Session",
       required: true,
     },
-    seatNumber: Number,
-    userName: String,
-    userEmail: String,
-    paymentStatus: {
+
+    seatNumber: {
+      type: Number,
+      required: true,
+    },
+
+    userName: {
       type: String,
-      default: "pending",
+      required: true,
+      trim: true,
     },
   },
   { timestamps: true },
 );
+
+// Optional index for faster lookup
+bookingSchema.index({ session: 1, seatNumber: 1 });
 
 export default mongoose.model("Booking", bookingSchema);
