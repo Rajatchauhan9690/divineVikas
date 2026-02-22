@@ -157,7 +157,7 @@ const BookingPage = () => {
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-6">
       <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-72 bg-white shadow rounded-xl p-4 sticky top-4 h-fit">
+        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 sticky top-4 h-fit">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -190,7 +190,7 @@ const BookingPage = () => {
           </div>
         </div>
 
-        <div className="flex-1 bg-white shadow rounded-xl p-4 md:p-6">
+        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots
