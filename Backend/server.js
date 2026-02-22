@@ -15,9 +15,16 @@ connectDB();
 const app = express();
 const server = http.createServer(app);
 
+import cors from "cors";
+
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: [
+      "http://localhost:5173",
+      "https://www.divinevikas.com",
+      "https://divine-vikas-gcm4.vercel.app",
+    ],
+    credentials: true,
   }),
 );
 app.use(express.json());
