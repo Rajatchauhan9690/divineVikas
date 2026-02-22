@@ -1,5 +1,5 @@
-import Session from "../models/session.model.js";
-import Booking from "../models/booking.model.js";
+import Session from "../models/session.models.js";
+import Booking from "../models/booking.models.js";
 
 /* ===============================
    CREATE SESSION

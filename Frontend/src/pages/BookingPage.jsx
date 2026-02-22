@@ -2,17 +2,17 @@ import { useNavigate } from "react-router-dom";
 import { useEffect, useState, useRef, useCallback } from "react";
 import { toast } from "react-toastify";
 
-import SeatGrid from "./SeatGrid";
+import SeatGrid from "../components/booking/SeatGrid";
 
 import {
   adminGetSessionsApi,
   bookSeatApi,
   lockSeatApi,
   unlockSeatApi,
-} from "../../api/api";
+} from "../api/api";
 
-import { getDateLimits, getTodayDate } from "../../utils/dateUtils";
-import useAutoDateSync from "../../hooks/useAutoDateSync";
+import { getDateLimits, getTodayDate } from "../utils/dateUtils";
+import useAutoDateSync from "../hooks/useAutoDateSync";
 
 const BookingPage = () => {
   const navigate = useNavigate();
