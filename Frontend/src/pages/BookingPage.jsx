@@ -41,7 +41,12 @@ const BookingPage = () => {
       const response = await adminGetSessionsApi();
 
       const filtered = response
-        .filter((s) => s.date === dateValue)
+        .filter((s) => {
+         if (!s.date) return false;
+         return (
+             new Date(s.date).toISOString().split("T")[0] === dateValue
+              );
+        });
         .sort((a, b) => {
           const parseTime = (timeStr) => {
             if (!timeStr) return 0;
