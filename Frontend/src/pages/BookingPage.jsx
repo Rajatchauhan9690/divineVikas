@@ -120,6 +120,15 @@ const BookingPage = () => {
     try {
       if (!selectedSession) return;
 
+      // 🔥 If user already selected a seat → unlock it first
+      if (selectedSeat && selectedSeat !== seatNumber) {
+        await lockSeatApi({
+          sessionId: selectedSession._id,
+          seatNumber: selectedSeat,
+          unlock: true, // backend should support this
+        });
+      }
+
       setSelectedSeat(seatNumber);
 
       await lockSeatApi({

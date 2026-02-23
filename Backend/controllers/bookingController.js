@@ -171,10 +171,9 @@ const LOCK_TIME = 5 * 60 * 1000;
 /* ===============================
    LOCK SEAT
 ================================ */
-
 export const lockSeat = async (req, res) => {
   try {
-    const { sessionId, seatNumber } = req.body;
+    const { sessionId, seatNumber, unlock } = req.body;
 
     if (!sessionId || seatNumber === undefined) {
       return res.status(400).json({
@@ -182,6 +181,23 @@ export const lockSeat = async (req, res) => {
       });
     }
 
+    // 🔥 Unlock request handling
+    if (unlock) {
+      await Session.updateOne(
+        { _id: sessionId },
+        {
+          $pull: {
+            lockedSeats: { seatNumber },
+          },
+        },
+      );
+
+      return res.json({
+        message: "Seat unlocked successfully",
+      });
+    }
+
+    // 🔥 Lock seat logic
     const session = await Session.findOneAndUpdate(
       {
         _id: sessionId,
@@ -197,7 +213,7 @@ export const lockSeat = async (req, res) => {
         },
         $set: { status: "locked" },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!session) {
@@ -211,10 +227,7 @@ export const lockSeat = async (req, res) => {
     res.json({
       message: "Seat locked successfully",
     });
-
   } catch (error) {
-    console.error("Lock Seat Error:", error);
-
     res.status(500).json({
       message: error.message || "Locking failed",
     });
@@ -244,7 +257,7 @@ export const unlockSeat = async (req, res) => {
         $pull: { lockedSeats: { seatNumber } },
         $set: { status: "available" },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!session) {
@@ -258,7 +271,6 @@ export const unlockSeat = async (req, res) => {
     res.json({
       message: "Seat unlocked successfully",
     });
-
   } catch (error) {
     console.error("Unlock Seat Error:", error);
 
@@ -293,7 +305,7 @@ export const bookSeat = async (req, res) => {
         $pull: { lockedSeats: { seatNumber } },
         $set: { status: "booked" },
       },
-      { new: true }
+      { new: true },
     );
 
     if (!session) {
@@ -314,7 +326,6 @@ export const bookSeat = async (req, res) => {
       message: "Seat booked successfully",
       booking,
     });
-
   } catch (error) {
     console.error("Booking Error:", error);
 
