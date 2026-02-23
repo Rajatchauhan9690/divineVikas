@@ -7,7 +7,13 @@ import Booking from "../models/booking.models.js";
 
 export const createSession = async (req, res) => {
   try {
-    const session = await Session.create(req.body);
+    const sessionData = {
+      ...req.body,
+      date: new Date(req.body.date),
+    };
+
+    const session = await Session.create(sessionData);
+
     res.status(201).json(session);
   } catch (error) {
     res.status(500).json({ message: error.message });
