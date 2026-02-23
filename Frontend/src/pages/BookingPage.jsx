@@ -199,11 +199,16 @@ const BookingPage = () => {
   ================================= */
 
   return (
-    <div className="h-screen max-w-7xl mx-auto py-10 px-4 md:px-6">
-      <div className="flex flex-col md:flex-row gap-6 h-full">
+    <div className="w-full max-w-7xl mx-auto py-4 md:py-10 px-3 md:px-6 overflow-x-hidden">
+      <div className="flex flex-col md:flex-row gap-6 h-full w-full">
         {/* Sidebar */}
-        <div className="w-full md:w-72 bg-white shadow-xl rounded-xl p-4 overflow-y-auto">
-          <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
+        <div
+          className="w-full md:w-72 bg-white shadow-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]
+        rounded-xl p-4 h-[23vh] md:h-full overflow-y-auto overflow-x-hidden hide-scrollbar"
+        >
+          <h3 className="text-lg font-bold text-center mb-3 md:mb-4">
+            Select Date
+          </h3>
 
           <input
             type="date"
@@ -211,24 +216,25 @@ const BookingPage = () => {
             min={minDate}
             max={maxDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full border rounded-lg p-3 mb-6"
+            className="w-full border rounded-lg p-2 md:p-3 mb-4 md:mb-6 text-sm md:text-base"
           />
 
-          <h3 className="text-lg font-bold text-center mb-4">
+          <h3 className="text-lg font-bold text-center mb-3 md:mb-4">
             Meditation Slots
           </h3>
 
-          <div className="flex flex-col gap-3">
+          {/* Slot List */}
+          <div className="flex md:flex-col gap-2 md:gap-3 overflow-x-auto hide-scrollbar pb-2">
             {loading ? (
-              <div className="h-[400px] flex items-center justify-center">
-                <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              <div className="w-full h-[200px] flex items-center justify-center">
+                <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : (
               sessions.map((session) => (
                 <button
                   key={session._id}
                   onClick={() => setSelectedSession(session)}
-                  className={`w-full border rounded-lg p-3 transition ${
+                  className={`border rounded-lg p-2 md:p-3 transition min-w-[90px] md:w-full text-sm md:text-base ${
                     selectedSession?._id === session._id
                       ? "bg-green-500 text-white"
                       : "bg-white hover:bg-green-50"
@@ -242,14 +248,17 @@ const BookingPage = () => {
         </div>
 
         {/* Main Section */}
-        <div className="flex-1 bg-white shadow-xl rounded-xl p-4 md:p-6 overflow-y-auto">
+        <div
+          className="flex-1 w-full bg-white rounded-xl  shadow-[0_0_20px_rgba(0,0,0,0.15)]
+        p-4 md:p-6 h-[75vh] md:h-auto overflow-y-auto overflow-x-hidden pb-22 md:pb-6"
+        >
           {!selectedSession ? (
-            <div className="h-[400px] flex items-center justify-center text-gray-400">
+            <div className="h-[300px] md:h-[400px] flex items-center justify-center text-gray-400 text-sm md:text-base">
               No available slots
             </div>
           ) : (
             <>
-              <h2 className="text-2xl font-bold text-center mb-6">
+              <h2 className="text-xl md:text-2xl font-bold text-center mb-4 md:mb-6">
                 Select Your Seat
               </h2>
 
@@ -261,14 +270,16 @@ const BookingPage = () => {
                 onSeatSelect={handleSeatSelect}
               />
 
-              <div className="text-center mt-8">
-                <p className="mb-3 font-semibold">
+              {/* Bottom Confirm Section */}
+              <div className="fixed bottom-0 left-4 right-4 bg-white p-4 shadow-lg md:static md:shadow-none text-center z-50">
+                <p className="mb-2 md:mb-3 font-semibold text-sm md:text-base">
                   Selected Seat: {selectedSeat || "None"}
                 </p>
 
                 <button
                   onClick={handleConfirm}
-                  className="bg-green-600 text-white px-8 py-3 rounded-lg"
+                  className="bg-green-600 text-white px-6 py-2 md:px-8 md:py-3 
+                rounded-lg w-full md:w-auto text-sm md:text-base"
                 >
                   Confirm Booking
                 </button>
