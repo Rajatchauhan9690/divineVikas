@@ -222,7 +222,7 @@ export const lockSeat = async (req, res) => {
       });
     }
 
-    getIO().to(sessionId).emit("seat-updated", { sessionId });
+    getIO().to(sessionId).emit("seat-updated", sessionId);
 
     res.json({
       message: "Seat locked successfully",
@@ -266,7 +266,7 @@ export const unlockSeat = async (req, res) => {
       });
     }
 
-    getIO().to(sessionId).emit("seat-updated", { sessionId });
+    getIO().to(sessionId).emit("seat-updated", sessionId);
 
     res.json({
       message: "Seat unlocked successfully",
@@ -320,7 +320,7 @@ export const bookSeat = async (req, res) => {
       userName,
     });
 
-    getIO().to(sessionId).emit("seat-updated", { sessionId });
+    getIO().to(sessionId).emit("seat-updated", sessionId);
 
     res.status(201).json({
       message: "Seat booked successfully",
