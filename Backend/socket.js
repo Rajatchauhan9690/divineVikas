@@ -14,7 +14,6 @@ export const initSocket = (server) => {
 
     socket.on("join-session", (sessionId) => {
       socket.join(sessionId);
-      console.log(`User joined session: ${sessionId}`);
     });
 
     socket.on("disconnect", () => {
@@ -24,8 +23,6 @@ export const initSocket = (server) => {
 };
 
 export const getIO = () => {
-  if (!io) {
-    throw new Error("Socket.io not initialized");
-  }
+  if (!io) throw new Error("Socket.io not initialized");
   return io;
 };

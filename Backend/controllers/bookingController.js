@@ -1,7 +1,7 @@
-import Session from "../models/session.models.js";
-import Booking from "../models/booking.models.js";
-import { getIO } from "../socket.js";
-import mongoose from "mongoose";
+// import Session from "../models/session.models.js";
+// import Booking from "../models/booking.models.js";
+// import { getIO } from "../socket.js";
+// import mongoose from "mongoose";
 
 /*
 |--------------------------------------------------------------------------
@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 |--------------------------------------------------------------------------
 */
 
-const LOCK_TIME = 5 * 60 * 1000;
+// const LOCK_TIME = 5 * 60 * 1000;
 
 /* ===============================
    LOCK SEAT
@@ -156,59 +156,22 @@ const LOCK_TIME = 5 * 60 * 1000;
 //   }
 // };
 
-export const bookSeat = async (req, res) => {
-  try {
-    const { sessionId, seatNumber, userName } = req.body;
+iimport Session from "../models/session.models.js";
+import Booking from "../models/booking.models.js";
+import { getIO } from "../socket.js";
 
-    if (!sessionId || seatNumber === undefined || !userName) {
-      return res.status(400).json({
-        message: "sessionId, seatNumber and userName are required",
-      });
-    }
+/*
+|--------------------------------------------------------------------------
+| BOOKING CONTROLLER (PRODUCTION CLEAN VERSION)
+|--------------------------------------------------------------------------
+*/
 
-    const sessionData = await Session.findOne({
-      _id: sessionId,
-      bookedSeats: { $nin: [seatNumber] },
-      lockedSeats: {
-        $elemMatch: { seatNumber: seatNumber },
-      },
-    });
-    // console.log("Session Data Found:", sessionData);
-    if (!sessionData) {
-      throw new Error("Seat not available for booking");
-    }
+const LOCK_TIME = 5 * 60 * 1000;
 
-    await Session.updateOne(
-      { _id: sessionId },
-      {
-        $addToSet: { bookedSeats: seatNumber },
-        $pull: { lockedSeats: { seatNumber } },
-        $set: { status: "booked" },
-      },
-    );
+/* ===============================
+   LOCK SEAT
+================================ */
 
-    const booking = await Booking.create({
-      session: sessionId,
-      seatNumber,
-      userName,
-    });
-
-    if (getIO()) {
-      getIO().to(sessionId).emit("seat-updated", sessionId);
-    }
-
-    res.status(201).json({
-      message: "Seat booked successfully",
-      booking,
-    });
-  } catch (error) {
-    console.error("Booking Error:", error);
-
-    res.status(500).json({
-      message: error.message || "Booking failed",
-    });
-  }
-};
 export const lockSeat = async (req, res) => {
   try {
     const { sessionId, seatNumber } = req.body;
@@ -223,7 +186,7 @@ export const lockSeat = async (req, res) => {
       {
         _id: sessionId,
         bookedSeats: { $nin: [seatNumber] },
-        lockedSeats: { $not: { $elemMatch: { seatNumber } } },
+        "lockedSeats.seatNumber": { $ne: seatNumber },
       },
       {
         $push: {
@@ -234,7 +197,7 @@ export const lockSeat = async (req, res) => {
         },
         $set: { status: "locked" },
       },
-      { new: true },
+      { new: true }
     );
 
     if (!session) {
@@ -243,13 +206,12 @@ export const lockSeat = async (req, res) => {
       });
     }
 
-    if (getIO()) {
-      getIO().to(sessionId).emit("seat-updated", sessionId);
-    }
+    getIO().to(sessionId).emit("seat-updated", { sessionId });
 
     res.json({
       message: "Seat locked successfully",
     });
+
   } catch (error) {
     console.error("Lock Seat Error:", error);
 
@@ -258,6 +220,11 @@ export const lockSeat = async (req, res) => {
     });
   }
 };
+
+/* ===============================
+   UNLOCK SEAT (Optional API)
+================================ */
+
 export const unlockSeat = async (req, res) => {
   try {
     const { sessionId, seatNumber } = req.body;
@@ -274,16 +241,10 @@ export const unlockSeat = async (req, res) => {
         "lockedSeats.seatNumber": seatNumber,
       },
       {
-        $pull: {
-          lockedSeats: { seatNumber },
-        },
-        $set: {
-          status: "available",
-        },
+        $pull: { lockedSeats: { seatNumber } },
+        $set: { status: "available" },
       },
-      {
-        new: true,
-      },
+      { new: true }
     );
 
     if (!session) {
@@ -292,18 +253,73 @@ export const unlockSeat = async (req, res) => {
       });
     }
 
-    if (getIO()) {
-      getIO().to(sessionId).emit("seat-updated", sessionId);
-    }
+    getIO().to(sessionId).emit("seat-updated", { sessionId });
 
     res.json({
       message: "Seat unlocked successfully",
     });
+
   } catch (error) {
     console.error("Unlock Seat Error:", error);
 
     res.status(500).json({
       message: error.message || "Unlock failed",
+    });
+  }
+};
+
+/* ===============================
+   BOOK SEAT (FINAL CONFIRMATION)
+================================ */
+
+export const bookSeat = async (req, res) => {
+  try {
+    const { sessionId, seatNumber, userName } = req.body;
+
+    if (!sessionId || seatNumber === undefined || !userName) {
+      return res.status(400).json({
+        message: "sessionId, seatNumber and userName are required",
+      });
+    }
+
+    const session = await Session.findOneAndUpdate(
+      {
+        _id: sessionId,
+        bookedSeats: { $nin: [seatNumber] },
+        "lockedSeats.seatNumber": seatNumber,
+      },
+      {
+        $addToSet: { bookedSeats: seatNumber },
+        $pull: { lockedSeats: { seatNumber } },
+        $set: { status: "booked" },
+      },
+      { new: true }
+    );
+
+    if (!session) {
+      return res.status(400).json({
+        message: "Seat already booked or lock expired",
+      });
+    }
+
+    const booking = await Booking.create({
+      session: sessionId,
+      seatNumber,
+      userName,
+    });
+
+    getIO().to(sessionId).emit("seat-updated", { sessionId });
+
+    res.status(201).json({
+      message: "Seat booked successfully",
+      booking,
+    });
+
+  } catch (error) {
+    console.error("Booking Error:", error);
+
+    res.status(500).json({
+      message: error.message || "Booking failed",
     });
   }
 };

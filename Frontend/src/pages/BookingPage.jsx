@@ -1,15 +1,10 @@
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { toast } from "react-toastify";
 
 import SeatGrid from "../components/booking/SeatGrid";
 
-import {
-  adminGetSessionsApi,
-  bookSeatApi,
-  lockSeatApi,
-  unlockSeatApi,
-} from "../api/api";
+import { adminGetSessionsApi, bookSeatApi, lockSeatApi } from "../api/api";
 
 import { getDateLimits, getTodayDate } from "../utils/dateUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
@@ -26,39 +21,22 @@ const BookingPage = () => {
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
-  const lockedSeatRef = useRef(null);
-  const lockIntervalRef = useRef(null);
+  const apiLockRef = useRef(false);
+  const confirmLockRef = useRef(false);
 
   useAutoDateSync(setSelectedDate);
 
-  /* ---------- Spinner ---------- */
+  /* ===============================
+     Load Sessions
+  ================================= */
 
-  const Spinner = () => (
-    <div className="flex justify-center items-center h-64">
-      <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full rounded-full animate-spin"></div>
-    </div>
-  );
-
-  /* ---------- Seat Skeleton ---------- */
-
-  const SeatSkeleton = () => {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 p-4 animate-pulse">
-        {Array.from({ length: 24 }).map((_, index) => (
-          <div
-            key={index}
-            className="h-12 md:h-14 bg-gray-200 rounded-lg"
-          ></div>
-        ))}
-      </div>
-    );
-  };
-
-  /* ---------- Load Sessions ---------- */
-
-  const loadSessions = useCallback(async (dateValue) => {
+  const loadSessions = useCallback(async (dateValue, showLoading = true) => {
     try {
-      setLoading(true);
+      if (apiLockRef.current) return;
+
+      apiLockRef.current = true;
+
+      if (showLoading) setLoading(true);
 
       const response = await adminGetSessionsApi();
 
@@ -89,22 +67,31 @@ const BookingPage = () => {
         });
 
       setSessions(filtered);
-      setSelectedSession(filtered[0] || null);
 
-      setSelectedSeat(null);
-      lockedSeatRef.current = null;
+      setSelectedSession((prev) => {
+        if (!filtered.length) return null;
+
+        if (!prev) return filtered[0];
+
+        const exists = filtered.find((s) => s._id === prev._id);
+
+        return exists ? prev : filtered[0];
+      });
     } catch {
-      toast.error("Failed to load sessions");
+      toast.error("Failed to load slots");
     } finally {
-      setLoading(false);
+      apiLockRef.current = false;
+      if (showLoading) setLoading(false);
     }
   }, []);
+
+  /* ===============================
+     Effects
+  ================================= */
 
   useEffect(() => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
-
-  /* ---------- Socket Sync ---------- */
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -112,81 +99,66 @@ const BookingPage = () => {
     const socket = window.socket;
     if (!socket) return;
 
-    socket.emit("joinSession", selectedSession._id);
+    socket.emit("join-session", selectedSession._id);
 
-    const handleSeatUpdate = async () => {
-      try {
-        const response = await adminGetSessionsApi();
-        setSessions(response.filter((s) => s.date === selectedDate));
-      } catch {}
+    const handleSeatUpdate = () => {
+      loadSessions(selectedDate, false);
     };
 
     socket.on("seat-updated", handleSeatUpdate);
 
-    return () => socket.off("seat-updated", handleSeatUpdate);
-  }, [selectedSession, selectedDate]);
+    return () => {
+      socket.off("seat-updated", handleSeatUpdate);
+    };
+  }, [selectedSession, selectedDate, loadSessions]);
 
-  /* ---------- Lock Refresh ---------- */
+  /* ===============================
+     Seat Selection
+  ================================= */
 
-  const startLockRefresh = useCallback(() => {
-    if (lockIntervalRef.current) clearInterval(lockIntervalRef.current);
-
-    lockIntervalRef.current = setInterval(async () => {
-      if (!lockedSeatRef.current || !selectedSession) return;
-
-      try {
-        await lockSeatApi({
-          sessionId: selectedSession._id,
-          seatNumber: lockedSeatRef.current,
-        });
-      } catch {}
-    }, 10000);
-  }, [selectedSession]);
-
-  /* ---------- Seat Selection ---------- */
-
-  const handleSeatSelect = useCallback(
-    async (seatNumber) => {
-      try {
-        if (!selectedSession) return;
-
-        if (lockedSeatRef.current && lockedSeatRef.current !== seatNumber) {
-          await unlockSeatApi({
-            sessionId: selectedSession._id,
-            seatNumber: lockedSeatRef.current,
-          });
-        }
-
-        setSelectedSeat(seatNumber);
-        lockedSeatRef.current = seatNumber;
-
-        await lockSeatApi({
-          sessionId: selectedSession._id,
-          seatNumber,
-        });
-
-        startLockRefresh();
-      } catch {
-        toast.error("Seat lock failed");
-        setSelectedSeat(null);
-        lockedSeatRef.current = null;
-      }
-    },
-    [selectedSession, startLockRefresh],
-  );
-
-  /* ---------- Confirm Booking ---------- */
-
-  const handleConfirm = useCallback(async () => {
+  const handleSeatSelect = async (seatNumber) => {
     try {
-      if (!selectedSession) return toast.error("Select a slot");
-      if (!selectedSeat) return toast.error("Select a seat");
+      if (!selectedSession) return;
 
-      await bookSeatApi({
+      setSelectedSeat(seatNumber);
+
+      await lockSeatApi({
+        sessionId: selectedSession._id,
+        seatNumber,
+      });
+    } catch {
+      toast.error("Seat lock failed");
+      setSelectedSeat(null);
+    }
+  };
+
+  /* ===============================
+     Confirm Booking
+  ================================= */
+
+  const handleConfirm = async () => {
+    try {
+      if (confirmLockRef.current) return;
+
+      confirmLockRef.current = true;
+
+      if (!selectedSession) {
+        toast.error("Select a slot");
+        return;
+      }
+
+      if (!selectedSeat) {
+        toast.error("Select a seat");
+        return;
+      }
+
+      const response = await bookSeatApi({
         sessionId: selectedSession._id,
         seatNumber: selectedSeat,
         userName: "Guest User",
       });
+
+      if (!response) throw new Error("Booking failed");
 
       toast.success("Booking confirmed");
 
@@ -197,19 +169,27 @@ const BookingPage = () => {
           time: selectedSession.time,
           seatNumber: selectedSeat,
         },
+        replace: true,
       });
-    } catch {
-      toast.error("Booking failed");
+    } catch (error) {
+      console.error("Booking Error:", error);
+      toast.error(
+        error?.response?.data?.message || error?.message || "Booking failed",
+      );
+    } finally {
+      confirmLockRef.current = false;
     }
-  }, [selectedSession, selectedSeat, selectedDate, navigate]);
+  };
 
-  /* ---------- Render ---------- */
+  /* ===============================
+     UI Render
+  ================================= */
 
   return (
     <div className="h-screen max-w-7xl mx-auto py-10 px-4 md:px-6">
       <div className="flex flex-col md:flex-row gap-6 h-full">
         {/* Sidebar */}
-        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 h-[28vh] md:h-full overflow-y-auto hide-scrollbar">
+        <div className="w-full md:w-72 bg-white shadow-xl rounded-xl p-4 overflow-y-auto">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -225,61 +205,57 @@ const BookingPage = () => {
             Meditation Slots
           </h3>
 
-          <div className="flex flex-row md:flex-col gap-3 overflow-x-auto hide-scrollbar">
+          <div className="flex flex-col gap-3">
             {loading ? (
-              <Spinner />
+              <div className="h-[400px] flex items-center justify-center">
+                <div className="w-12 h-12 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
+              </div>
             ) : (
               sessions.map((session) => (
                 <button
                   key={session._id}
                   onClick={() => setSelectedSession(session)}
-                  className={`min-w-[140px] md:w-full border rounded-lg p-3 transition ${
+                  className={`w-full border rounded-lg p-3 transition ${
                     selectedSession?._id === session._id
                       ? "bg-green-500 text-white"
                       : "bg-white hover:bg-green-50"
                   }`}
                 >
-                  <p className="font-semibold">{session.time}</p>
+                  {session.time}
                 </button>
               ))
             )}
           </div>
         </div>
 
-        {/* Main */}
-        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 md:p-6 overflow-y-auto hide-scrollbar">
+        {/* Main Section */}
+        <div className="flex-1 bg-white shadow-xl rounded-xl p-4 md:p-6 overflow-y-auto">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots
             </div>
           ) : (
             <>
-              <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold">Select Your Seat</h2>
-              </div>
+              <h2 className="text-2xl font-bold text-center mb-6">
+                Select Your Seat
+              </h2>
 
-              {loading ? (
-                <SeatSkeleton />
-              ) : (
-                <div className="block max-h-[45vh] md:max-h-none overflow-y-auto hide-scrollbar p-4">
-                  <SeatGrid
-                    totalSeats={selectedSession.totalSeats}
-                    bookedSeats={selectedSession.bookedSeats}
-                    lockedSeats={selectedSession.lockedSeats}
-                    selectedSeat={selectedSeat}
-                    onSeatSelect={handleSeatSelect}
-                  />
-                </div>
-              )}
+              <SeatGrid
+                totalSeats={selectedSession.totalSeats}
+                bookedSeats={selectedSession.bookedSeats}
+                lockedSeats={selectedSession.lockedSeats}
+                selectedSeat={selectedSeat}
+                onSeatSelect={handleSeatSelect}
+              />
 
-              <div className="fixed bottom-0 left-4 right-4 m-w-full bg-white  p-4 md:static md:shadow-none md:bg-transparent text-center z-50">
+              <div className="text-center mt-8">
                 <p className="mb-3 font-semibold">
                   Selected Seat: {selectedSeat || "None"}
                 </p>
 
                 <button
                   onClick={handleConfirm}
-                  className="bg-green-600 text-white px-8 py-3 rounded-lg w-full md:w-auto"
+                  className="bg-green-600 text-white px-8 py-3 rounded-lg"
                 >
                   Confirm Booking
                 </button>
