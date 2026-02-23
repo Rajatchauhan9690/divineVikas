@@ -20,6 +20,7 @@ const BookingPage = () => {
   const { minDate, maxDate } = getDateLimits();
 
   const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(false);
 
   const [selectedDate, setSelectedDate] = useState(getTodayDate());
   const [selectedSession, setSelectedSession] = useState(null);
@@ -28,16 +29,64 @@ const BookingPage = () => {
   const lockedSeatRef = useRef(null);
   const lockIntervalRef = useRef(null);
 
-  /* ⭐ Auto Date Sync Hook */
   useAutoDateSync(setSelectedDate);
+
+  /* ---------- Spinner ---------- */
+
+  const Spinner = () => (
+    <div className="flex justify-center items-center h-64">
+      <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full rounded-full animate-spin"></div>
+    </div>
+  );
+
+  /* ---------- Seat Skeleton ---------- */
+
+  const SeatSkeleton = () => {
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4 p-4 animate-pulse">
+        {Array.from({ length: 24 }).map((_, index) => (
+          <div
+            key={index}
+            className="h-12 md:h-14 bg-gray-200 rounded-lg"
+          ></div>
+        ))}
+      </div>
+    );
+  };
 
   /* ---------- Load Sessions ---------- */
 
   const loadSessions = useCallback(async (dateValue) => {
     try {
+      setLoading(true);
+
       const response = await adminGetSessionsApi();
 
-      const filtered = response.filter((s) => s.date === dateValue);
+      const filtered = response
+        .filter((s) => s.date === dateValue)
+        .sort((a, b) => {
+          const parseTime = (timeStr) => {
+            if (!timeStr) return 0;
+
+            let [time, modifier] = timeStr.split(" ");
+            let [hour, minute = "0"] = time.split(":");
+
+            hour = Number(hour);
+            minute = Number(minute);
+
+            if (modifier?.toUpperCase() === "PM" && hour !== 12) {
+              hour += 12;
+            }
+
+            if (modifier?.toUpperCase() === "AM" && hour === 12) {
+              hour = 0;
+            }
+
+            return hour * 60 + minute;
+          };
+
+          return parseTime(a.time) - parseTime(b.time);
+        });
 
       setSessions(filtered);
       setSelectedSession(filtered[0] || null);
@@ -46,6 +95,8 @@ const BookingPage = () => {
       lockedSeatRef.current = null;
     } catch {
       toast.error("Failed to load sessions");
+    } finally {
+      setLoading(false);
     }
   }, []);
 
@@ -155,10 +206,10 @@ const BookingPage = () => {
   /* ---------- Render ---------- */
 
   return (
-    <div className="h-screen max-w-7xl mx-auto py-6 px-4 md:px-6">
+    <div className="h-screen max-w-7xl mx-auto py-10 px-4 md:px-6">
       <div className="flex flex-col md:flex-row gap-6 h-full">
         {/* Sidebar */}
-        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 h-full overflow-y-auto hide-scrollbar">
+        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 h-[28vh] md:h-full overflow-y-auto hide-scrollbar">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -175,24 +226,28 @@ const BookingPage = () => {
           </h3>
 
           <div className="flex flex-row md:flex-col gap-3 overflow-x-auto hide-scrollbar">
-            {sessions.map((session) => (
-              <button
-                key={session._id}
-                onClick={() => setSelectedSession(session)}
-                className={`min-w-[140px] md:w-full border rounded-lg p-3 transition ${
-                  selectedSession?._id === session._id
-                    ? "bg-green-500 text-white"
-                    : "bg-white hover:bg-green-50"
-                }`}
-              >
-                <p className="font-semibold">{session.time}</p>
-              </button>
-            ))}
+            {loading ? (
+              <Spinner />
+            ) : (
+              sessions.map((session) => (
+                <button
+                  key={session._id}
+                  onClick={() => setSelectedSession(session)}
+                  className={`min-w-[140px] md:w-full border rounded-lg p-3 transition ${
+                    selectedSession?._id === session._id
+                      ? "bg-green-500 text-white"
+                      : "bg-white hover:bg-green-50"
+                  }`}
+                >
+                  <p className="font-semibold">{session.time}</p>
+                </button>
+              ))
+            )}
           </div>
         </div>
 
         {/* Main */}
-        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6 h-full overflow-y-auto hide-scrollbar">
+        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 md:p-6 overflow-y-auto hide-scrollbar">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots
@@ -203,13 +258,19 @@ const BookingPage = () => {
                 <h2 className="text-2xl font-bold">Select Your Seat</h2>
               </div>
 
-              <SeatGrid
-                totalSeats={selectedSession.totalSeats}
-                bookedSeats={selectedSession.bookedSeats}
-                lockedSeats={selectedSession.lockedSeats}
-                selectedSeat={selectedSeat}
-                onSeatSelect={handleSeatSelect}
-              />
+              {loading ? (
+                <SeatSkeleton />
+              ) : (
+                <div className="block">
+                  <SeatGrid
+                    totalSeats={selectedSession.totalSeats}
+                    bookedSeats={selectedSession.bookedSeats}
+                    lockedSeats={selectedSession.lockedSeats}
+                    selectedSeat={selectedSeat}
+                    onSeatSelect={handleSeatSelect}
+                  />
+                </div>
+              )}
 
               <div className="text-center mt-10">
                 <p className="mb-4 font-semibold">

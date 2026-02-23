@@ -83,17 +83,39 @@ const AdminPage = () => {
 
   /* ---------------- TIME HANDLER ---------------- */
   const handleTimeChange = (e) => {
-    let value = e.target.value.replace(/[^0-9]/g, "");
+    let value = e.target.value.replace(/\D/g, "");
+
     if (value.length > 4) value = value.slice(0, 4);
 
     let hour = value.slice(0, 2);
     let minute = value.slice(2, 4);
 
-    if (hour && Number(hour) > 12) return toast.error("Hour max 12");
-    if (hour && Number(hour) === 0) return toast.error("Hour 1-12 only");
-    if (minute && Number(minute) > 59) return toast.error("Minute max 59");
+    if (value.length === 3) {
+      minute = value.slice(2, 3) + "0";
+    }
 
-    if (value.length >= 3) value = hour + ":" + minute;
+    if (value.length >= 2) {
+      hour = hour.padStart(2, "0");
+    }
+
+    if (minute.length === 1) minute = minute + "0";
+
+    // ✅ Validate only when user completes 4 digits
+    if (value.length === 4) {
+      if (Number(hour) === 0 || Number(hour) > 12) {
+        toast.error("Hour must be between 01 and 12");
+        return;
+      }
+
+      if (Number(minute) > 59) {
+        toast.error("Minute must be between 00 and 59");
+        return;
+      }
+
+      setTimeValue(`${hour}:${minute}`);
+      return;
+    }
+
     setTimeValue(value);
   };
 
