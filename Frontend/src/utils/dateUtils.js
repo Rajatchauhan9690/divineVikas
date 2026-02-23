@@ -7,7 +7,7 @@ export const formatLocalDate = (date) => {
 
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0"); // ✅ added back
 
   return `${y}-${m}-${day}`;
 };
@@ -19,20 +19,16 @@ export const getTodayDate = () => {
 };
 
 /* ---------- Get Date Limits (Booking Page) ---------- */
+/* 🚫 Removed future 2 days restriction */
 
-export const getDateLimits = (plusDays = 2) => {
-  const today = new Date();
-  const max = new Date();
-
-  max.setDate(today.getDate() + plusDays);
-
+export const getDateLimits = () => {
   return {
-    minDate: formatLocalDate(today),
-    maxDate: formatLocalDate(max),
+    minDate: formatLocalDate(new Date()),
+    maxDate: "", // no upper limit
   };
 };
 
-/* ---------- Display Date Format (Admin History) ---------- */
+/* ---------- Display Date Format (Admin & Booking) ---------- */
 
 export const formatDisplayDate = (dateString) => {
   if (!dateString) return "";
