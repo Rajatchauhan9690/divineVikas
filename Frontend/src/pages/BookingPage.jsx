@@ -155,9 +155,10 @@ const BookingPage = () => {
   /* ---------- Render ---------- */
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-6">
-      <div className="flex flex-col md:flex-row gap-6">
-        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 sticky top-4 h-fit">
+    <div className="h-screen max-w-7xl mx-auto py-6 px-4 md:px-6">
+      <div className="flex flex-col md:flex-row gap-6 h-full">
+        {/* Sidebar */}
+        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 h-full overflow-y-auto hide-scrollbar">
           <h3 className="text-lg font-bold text-center mb-4">Select Date</h3>
 
           <input
@@ -173,7 +174,7 @@ const BookingPage = () => {
             Meditation Slots
           </h3>
 
-          <div className="flex flex-row md:flex-col gap-3 overflow-x-auto">
+          <div className="flex flex-row md:flex-col gap-3 overflow-x-auto hide-scrollbar">
             {sessions.map((session) => (
               <button
                 key={session._id}
@@ -190,7 +191,8 @@ const BookingPage = () => {
           </div>
         </div>
 
-        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6">
+        {/* Main */}
+        <div className="flex-1 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6 h-full overflow-y-auto hide-scrollbar">
           {!selectedSession ? (
             <div className="h-[400px] flex items-center justify-center text-gray-400">
               No available slots
@@ -199,12 +201,6 @@ const BookingPage = () => {
             <>
               <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold">Select Your Seat</h2>
-
-                <p className="text-gray-500 mt-2">Date: {selectedDate}</p>
-
-                <p className="text-gray-500 mt-1">
-                  Slot Time: {selectedSession.time}
-                </p>
               </div>
 
               <SeatGrid

@@ -10,8 +10,11 @@ import { getTodayDate, formatDisplayDate } from "../utils/dateUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
 
 const AdminPage = () => {
+  const [activeTab, setActiveTab] = useState("create");
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
+  const [deleteId, setDeleteId] = useState(null);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -26,25 +29,32 @@ const AdminPage = () => {
     from: "",
     to: "",
   });
-
-  const [deleteId, setDeleteId] = useState(null);
-
-  /* ⭐ Auto Date Sync */
-  useAutoDateSync((newDate) => {
-    setForm((prev) => ({
-      ...prev,
-      date: newDate,
-    }));
+  const [appliedFilter, setAppliedFilter] = useState({
+    from: "",
+    to: "",
+  });
+  const [bookingFilter, setBookingFilter] = useState({
+    from: "",
+    to: "",
   });
 
-  /* ---------- Fetch Data ---------- */
+  const [appliedBookingFilter, setAppliedBookingFilter] = useState({
+    from: "",
+    to: "",
+  });
 
+  /* ---------------- AUTO DATE SYNC ---------------- */
+  useAutoDateSync((newDate) => {
+    setForm((prev) => ({ ...prev, date: newDate }));
+  });
+
+  /* ---------------- FETCH ---------------- */
   const fetchSlots = useCallback(async () => {
     try {
       const data = await adminGetSessionsApi();
       setSlots(data || []);
     } catch {
-      console.error("Slot fetch failed");
+      toast.error("Slot fetch failed");
     }
   }, []);
 
@@ -53,7 +63,7 @@ const AdminPage = () => {
       const res = await adminGetAllBookingsApi();
       setBookings(res || []);
     } catch {
-      console.error("Booking fetch failed");
+      toast.error("Booking fetch failed");
     }
   }, []);
 
@@ -62,64 +72,52 @@ const AdminPage = () => {
     fetchBookings();
   }, [fetchSlots, fetchBookings]);
 
-  /* ---------- 12 Hour Time Validation ---------- */
+  /* ---------------- CALCULATIONS ---------------- */
+  const totalSlots = slots.length;
 
-  const handleTimeChange = useCallback((e) => {
+  const totalSeats = useMemo(() => {
+    return slots.reduce((sum, slot) => sum + Number(slot.totalSeats || 0), 0);
+  }, [slots]);
+
+  const totalBookedSeats = bookings.length;
+
+  /* ---------------- TIME HANDLER ---------------- */
+  const handleTimeChange = (e) => {
     let value = e.target.value.replace(/[^0-9]/g, "");
-
     if (value.length > 4) value = value.slice(0, 4);
 
     let hour = value.slice(0, 2);
     let minute = value.slice(2, 4);
 
-    if (hour && Number(hour) > 12) {
-      toast.error("Hour cannot be greater than 12");
-      return;
-    }
+    if (hour && Number(hour) > 12) return toast.error("Hour max 12");
+    if (hour && Number(hour) === 0) return toast.error("Hour 1-12 only");
+    if (minute && Number(minute) > 59) return toast.error("Minute max 59");
 
-    if (hour && Number(hour) === 0) {
-      toast.error("Hour must be between 1 and 12");
-      return;
-    }
-
-    if (minute && Number(minute) > 59) {
-      toast.error("Minutes cannot be greater than 59");
-      return;
-    }
-
-    if (value.length >= 3) {
-      value = hour + ":" + minute;
-    }
-
+    if (value.length >= 3) value = hour + ":" + minute;
     setTimeValue(value);
-  }, []);
+  };
 
   const isFormValid = useMemo(() => {
-    if (!form.name || !form.date || !timeValue || !form.totalSeats)
-      return false;
+    if (!form.name.trim()) return false;
+    if (!form.date) return false;
+    if (!form.totalSeats || Number(form.totalSeats) <= 0) return false;
+    if (!timeValue.includes(":")) return false;
 
     const [hour, minute] = timeValue.split(":");
-
     if (!hour || !minute) return false;
-
     if (Number(hour) < 1 || Number(hour) > 12) return false;
     if (Number(minute) < 0 || Number(minute) > 59) return false;
 
     return true;
   }, [form, timeValue]);
 
-  const handleChange = useCallback((e) => {
-    setForm((prev) => ({
-      ...prev,
-      [e.target.name]: e.target.value,
-    }));
-  }, []);
+  const handleChange = (e) => {
+    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+  };
 
-  /* ---------- Session Create ---------- */
-
-  const handleAddSlot = useCallback(async () => {
-    if (!isFormValid)
-      return toast.error("Please enter valid 12 hour time (HH:MM)");
+  /* ---------------- CREATE SESSION ---------------- */
+  const handleAddSlot = async () => {
+    if (!isFormValid) return toast.error("Please enter valid time");
 
     try {
       await adminCreateSessionApi({
@@ -137,7 +135,6 @@ const AdminPage = () => {
         date: getTodayDate(),
         totalSeats: "",
       });
-
       setTimeValue("");
       setPeriod("AM");
 
@@ -145,14 +142,13 @@ const AdminPage = () => {
     } catch {
       toast.error("Failed to create session");
     }
-  }, [form, timeValue, period, isFormValid, fetchSlots]);
+  };
 
-  /* ---------- Delete ---------- */
-
+  /* ---------------- DELETE SESSION ---------------- */
   const handleDelete = async () => {
     try {
       await adminDeleteSessionApi(deleteId);
-      toast.success("Session deleted successfully");
+      toast.success("Deleted successfully");
       setDeleteId(null);
       fetchSlots();
     } catch {
@@ -160,42 +156,139 @@ const AdminPage = () => {
     }
   };
 
-  /* ---------- Filter Logic ---------- */
-
+  /* ---------------- HISTORY FILTER ---------------- */
   const filteredSlots = useMemo(() => {
     const sorted = [...slots].sort(
       (a, b) => new Date(b.date) - new Date(a.date),
     );
 
-    let display = sorted;
+    if (!appliedFilter.from && !appliedFilter.to) return sorted.slice(0, 5);
 
-    if (historyFilter.from || historyFilter.to) {
-      const fromDate = historyFilter.from ? new Date(historyFilter.from) : null;
+    return sorted.filter((slot) => {
+      const slotDate = new Date(slot.date);
+      const fromDate = appliedFilter.from ? new Date(appliedFilter.from) : null;
+      const toDate = appliedFilter.to ? new Date(appliedFilter.to) : null;
 
-      const toDate = historyFilter.to ? new Date(historyFilter.to) : null;
+      if (fromDate && slotDate < fromDate) return false;
+      if (toDate && slotDate > toDate) return false;
 
-      display = sorted.filter((slot) => {
-        const slotDate = new Date(slot.date);
-        if (fromDate && slotDate < fromDate) return false;
-        if (toDate && slotDate > toDate) return false;
-        return true;
-      });
+      return true;
+    });
+  }, [slots, appliedFilter]);
+  const filteredBookings = useMemo(() => {
+    const sorted = [...bookings].sort(
+      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
+    );
+
+    if (!appliedBookingFilter.from && !appliedBookingFilter.to) {
+      return sorted.slice(0, 5); // latest 5 bookings
     }
 
-    return display.slice(0, 5);
-  }, [slots, historyFilter]);
+    return sorted.filter((booking) => {
+      const bookingDate = new Date(booking.createdAt);
+      const fromDate = appliedBookingFilter.from
+        ? new Date(appliedBookingFilter.from)
+        : null;
+      const toDate = appliedBookingFilter.to
+        ? new Date(appliedBookingFilter.to)
+        : null;
 
+      if (fromDate && bookingDate < fromDate) return false;
+      if (toDate && bookingDate > toDate) return false;
+
+      return true;
+    });
+  }, [bookings, appliedBookingFilter]);
   /* ================= RENDER ================= */
-
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-6">
-      <h1 className="text-2xl md:text-3xl font-bold text-center mb-8">
-        Admin Session Management
-      </h1>
-      <div className="flex flex-col md:flex-row gap-8">
-        <div className="flex-1 space-y-8 order-1">
-          {/* CREATE SESSION FORM */}
-          <div className="bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 md:p-6 mb-10 w-full md:w-[100%] mx-auto space-y-4">
+    <div className="min-h-screen flex bg-gray-100">
+      {/* Desktop Sidebar */}
+      <aside className="hidden md:block w-64 bg-white shadow-lg p-6 space-y-4">
+        <button>
+          <h2 className="text-2xl font-bold">Admin Panel</h2>
+        </button>
+        {["create", "bookings", "history"].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => setActiveTab(tab)}
+            className={`w-full text-left px-4 py-2 rounded-lg ${
+              activeTab === tab ? "bg-blue-600 text-white" : "hover:bg-gray-100"
+            }`}
+          >
+            {tab === "create"
+              ? "Create Session"
+              : tab === "bookings"
+                ? "All Bookings"
+                : "Session History"}
+          </button>
+        ))}
+      </aside>
+
+      {/* Mobile Overlay */}
+      <div
+        className={`fixed inset-0 bg-black/40 z-40 md:hidden transition-opacity ${
+          isMobileSidebarOpen ? "opacity-100" : "opacity-0 pointer-events-none"
+        }`}
+        onClick={() => setIsMobileSidebarOpen(false)}
+      />
+
+      {/* Mobile Sidebar */}
+      <div
+        className={`fixed top-0 left-0 h-full w-64 bg-white shadow-lg p-6 space-y-4 z-50 transform transition-transform duration-300 md:hidden ${
+          isMobileSidebarOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
+        {/* Header Row */}
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-bold">Admin Panel</h2>
+
+          <button
+            className="text-xl"
+            onClick={() => setIsMobileSidebarOpen(false)}
+          >
+            ✕
+          </button>
+        </div>
+
+        {["create", "bookings", "history"].map((tab) => (
+          <button
+            key={tab}
+            onClick={() => {
+              setActiveTab(tab);
+              setIsMobileSidebarOpen(false);
+            }}
+            className={`w-full text-left px-4 py-2 rounded-lg ${
+              activeTab === tab ? "bg-blue-600 text-white" : "hover:bg-gray-100"
+            }`}
+          >
+            {tab === "create"
+              ? "Create Session"
+              : tab === "bookings"
+                ? "All Bookings"
+                : "Session History"}
+          </button>
+        ))}
+      </div>
+
+      {/* Main Content */}
+      <main className="flex-1 p-4 md:p-8">
+        {/* Mobile Header */}
+        <div className="flex items-center justify-between md:hidden mb-6">
+          <button
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="text-2xl"
+          >
+            ☰
+          </button>
+          <h1 className="text-2xl font-bold">Admin Panel</h1>
+        </div>
+
+        {/* Desktop Header */}
+        <h1 className="hidden md:block text-3xl font-bold mb-6">Admin Panel</h1>
+
+        {/* ================= CREATE SESSION ================= */}
+        {activeTab === "create" && (
+          <div className="bg-white p-6 rounded-xl shadow space-y-4">
             <h2 className="text-xl font-semibold">Create New Session</h2>
 
             <div className="grid md:grid-cols-2 gap-4">
@@ -204,7 +297,7 @@ const AdminPage = () => {
                 value={form.name}
                 onChange={handleChange}
                 placeholder="Session Name"
-                className="border p-3 rounded-lg w-full"
+                className="border p-3 rounded-lg"
               />
 
               <input
@@ -213,25 +306,23 @@ const AdminPage = () => {
                 value={form.date}
                 min={getTodayDate()}
                 onChange={handleChange}
-                className="border p-3 rounded-lg w-full"
+                className="border p-3 rounded-lg"
               />
 
-              <div className="flex gap-2 w-full">
+              <div className="flex gap-2">
                 <input
                   value={timeValue}
                   onChange={handleTimeChange}
                   placeholder="HH:MM"
-                  maxLength={5}
                   className="border p-3 rounded-lg w-full"
                 />
-
                 <select
                   value={period}
                   onChange={(e) => setPeriod(e.target.value)}
                   className="border p-3 rounded-lg"
                 >
-                  <option value="AM">AM</option>
-                  <option value="PM">PM</option>
+                  <option>AM</option>
+                  <option>PM</option>
                 </select>
               </div>
 
@@ -239,172 +330,302 @@ const AdminPage = () => {
                 name="totalSeats"
                 value={form.totalSeats}
                 onChange={handleChange}
-                placeholder="Total Seats"
                 type="number"
-                className="border p-3 rounded-lg w-full"
+                placeholder="Total Seats"
+                className="border p-3 rounded-lg"
               />
             </div>
 
-            <div className="flex justify-center">
-              <button
-                onClick={handleAddSlot}
-                disabled={!isFormValid}
-                className={`px-6 py-3 rounded-lg transition w-full md:w-auto ${
-                  isFormValid
-                    ? "bg-green-600 hover:bg-green-700 text-white"
-                    : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                }`}
-              >
-                Create Session
-              </button>
-            </div>
+            <button
+              onClick={handleAddSlot}
+              disabled={!isFormValid}
+              className={`px-6 py-3 rounded-lg transition ${
+                isFormValid
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
+              }`}
+            >
+              Create Session
+            </button>
           </div>
+        )}
 
-          {/* BOOKINGS LIST */}
-          <div className="bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6 w-full md:w-[100%] mx-auto mt-8">
-            <h2 className="text-xl font-semibold mb-6">All Bookings</h2>
+        {/* ================= BOOKINGS ================= */}
+        {activeTab === "bookings" && (
+          <div className="space-y-8">
+            {/* ================= FILTER SECTION ================= */}
+            <div className="bg-white p-6 rounded-xl shadow">
+              <h2 className="text-xl font-semibold mb-4">Filter Bookings</h2>
 
-            <div className="grid md:grid-cols-1 lg:grid-cols-2 gap-6">
-              {bookings.length > 0 ? (
-                bookings.map((booking) => (
-                  <div
-                    key={booking._id}
-                    className="border rounded-xl p-5 shadow hover:shadow-lg transition"
+              <div className="flex flex-col md:flex-row md:items-end gap-4">
+                <div className="flex flex-col w-full md:w-48">
+                  <label className="text-sm mb-1 font-medium">From</label>
+                  <input
+                    type="date"
+                    value={bookingFilter.from}
+                    onChange={(e) =>
+                      setBookingFilter({
+                        ...bookingFilter,
+                        from: e.target.value,
+                      })
+                    }
+                    className="border p-2 rounded"
+                  />
+                </div>
+
+                <div className="flex flex-col w-full md:w-48">
+                  <label className="text-sm mb-1 font-medium">To</label>
+                  <input
+                    type="date"
+                    value={bookingFilter.to}
+                    onChange={(e) =>
+                      setBookingFilter({
+                        ...bookingFilter,
+                        to: e.target.value,
+                      })
+                    }
+                    className="border p-2 rounded"
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setAppliedBookingFilter(bookingFilter)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
                   >
-                    <p className="text-lg font-semibold mb-2">
-                      {booking.userName || "N/A"}
-                    </p>
+                    View
+                  </button>
 
-                    <div className="text-sm text-gray-600 space-y-1">
-                      <p>Email: {booking.email || "N/A"}</p>
-                      <p>Seat No: {booking.seatNumber}</p>
+                  <button
+                    onClick={() => {
+                      setBookingFilter({ from: "", to: "" });
+                      setAppliedBookingFilter({ from: "", to: "" });
+                    }}
+                    className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
 
+            {/* ================= STATS ================= */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="bg-white p-6 rounded-xl shadow text-center">
+                <p className="text-gray-500">Total Slots</p>
+                <p className="text-3xl font-bold text-blue-600">{totalSlots}</p>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow text-center">
+                <p className="text-gray-500">Total Booking Seats</p>
+                <p className="text-3xl font-bold text-green-600">
+                  {totalBookedSeats}
+                </p>
+              </div>
+
+              <div className="bg-white p-6 rounded-xl shadow text-center">
+                <p className="text-gray-500">Total Seats</p>
+                <p className="text-3xl font-bold text-purple-600">
+                  {totalSeats}
+                </p>
+              </div>
+            </div>
+
+            {/* ================= BOOKING CARDS CONTAINER ================= */}
+            <div className="bg-white p-6 rounded-xl shadow">
+              {/* 🔹 Dynamic Heading INSIDE the div */}
+              <h2 className="text-xl font-semibold mb-6">
+                {appliedBookingFilter.from || appliedBookingFilter.to
+                  ? `Total Bookings from ${
+                      appliedBookingFilter.from
+                        ? formatDisplayDate(appliedBookingFilter.from)
+                        : "Beginning"
+                    } to ${
+                      appliedBookingFilter.to
+                        ? formatDisplayDate(appliedBookingFilter.to)
+                        : "Today"
+                    }`
+                  : "Bookings History (Latest 5 Bookings)"}
+              </h2>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {filteredBookings.length > 0 ? (
+                  filteredBookings.map((booking) => (
+                    <div
+                      key={booking._id}
+                      className="bg-gray-50 p-6 rounded-xl shadow space-y-2"
+                    >
                       <p>
-                        Booking Date:{" "}
-                        {booking.createdAt
-                          ? new Date(booking.createdAt).toLocaleDateString()
+                        <strong>User:</strong>{" "}
+                        {booking.userName || "Guest User"}
+                      </p>
+                      <p>
+                        <strong>Email:</strong> {booking.email || "N/A"}
+                      </p>
+                      <p>
+                        <strong>Seat No:</strong> {booking.seatNumber}
+                      </p>
+                      <p>
+                        <strong>Booking Date:</strong>{" "}
+                        {formatDisplayDate(booking.createdAt)}
+                      </p>
+                      <p>
+                        <strong>Slot Date:</strong>{" "}
+                        {booking.session?.date
+                          ? formatDisplayDate(booking.session.date)
                           : "N/A"}
                       </p>
-
-                      {booking.session && (
-                        <>
-                          <p>Slot Date: {booking.session.date}</p>
-                          <p>Slot Time: {booking.session.time}</p>
-                          <p>Session Name: {booking.session.name}</p>
-                        </>
-                      )}
+                      <p>
+                        <strong>Slot Time:</strong>{" "}
+                        {booking.session?.time || "N/A"}
+                      </p>
+                      <p>
+                        <strong>Session Name:</strong>{" "}
+                        {booking.session?.name || "N/A"}
+                      </p>
                     </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500">No bookings found</p>
-              )}
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 col-span-2">
+                    No bookings found
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-        <div className="flex-1 space-y-8 order-2">
-          {/* HISTORY FILTER */}
-          <div className="bg-blue-50 p-4 rounded-lg border mb-6 w-full md:w-[100%] mx-auto ">
-            <h2 className="font-semibold text-blue-700 mb-3">Filter History</h2>
+        )}
+        {/* ================= HISTORY ================= */}
+        {activeTab === "history" && (
+          <div className="space-y-8">
+            {/* ================= FILTER SECTION ================= */}
+            <div className="bg-white p-6 rounded-xl shadow">
+              {/* 🔹 Main Heading */}
+              <h1 className="text-xl font-semibold text-gray-800">
+                Filter History
+              </h1>
 
-            <div className="flex flex-col md:flex-row gap-3">
-              <input
-                type="date"
-                value={historyFilter.from}
-                onChange={(e) =>
-                  setHistoryFilter((prev) => ({
-                    ...prev,
-                    from: e.target.value,
-                  }))
-                }
-                className="border p-2 rounded w-full"
-              />
+              <div className=" p-4 rounded-lg flex flex-col md:flex-row md:items-end gap-4">
+                <div className="flex flex-col w-full md:w-48">
+                  <label className="text-sm mb-1 font-medium">From</label>
+                  <input
+                    type="date"
+                    value={historyFilter.from}
+                    onChange={(e) =>
+                      setHistoryFilter({
+                        ...historyFilter,
+                        from: e.target.value,
+                      })
+                    }
+                    className="border p-2 rounded"
+                  />
+                </div>
 
-              <input
-                type="date"
-                value={historyFilter.to}
-                onChange={(e) =>
-                  setHistoryFilter((prev) => ({
-                    ...prev,
-                    to: e.target.value,
-                  }))
-                }
-                className="border p-2 rounded w-full"
-              />
+                <div className="flex flex-col w-full md:w-48">
+                  <label className="text-sm mb-1 font-medium">To</label>
+                  <input
+                    type="date"
+                    value={historyFilter.to}
+                    onChange={(e) =>
+                      setHistoryFilter({ ...historyFilter, to: e.target.value })
+                    }
+                    className="border p-2 rounded"
+                  />
+                </div>
 
-              <button
-                onClick={() => setHistoryFilter({ from: "", to: "" })}
-                className="bg-gray-200 px-4 py-2 rounded w-full md:w-auto"
-              >
-                Reset
-              </button>
-            </div>
-          </div>
-          {/* SESSION HISTORY */}
-          <div className="bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]  rounded-xl p-4 md:p-6 w-full md:w-[100%] mx-auto">
-            <h2 className="text-xl font-semibold mb-6">
-              {historyFilter.from || historyFilter.to
-                ? `Session History (${formatDisplayDate(
-                    historyFilter.from || "Starting Date",
-                  )} → ${formatDisplayDate(
-                    historyFilter.to || "Ending Date",
-                  )} Slots)`
-                : "Session History (Latest 5 Default)"}
-            </h2>
-
-            <div className="grid sm:grid-cols-1 lg:grid-cols-2 gap-5">
-              {filteredSlots.length > 0 ? (
-                filteredSlots.map((slot) => (
-                  <div
-                    key={slot._id}
-                    className="p-4 border rounded-lg bg-green-50 relative"
+                <div className="flex gap-3 mt-2 md:mt-0">
+                  <button
+                    onClick={() => setAppliedFilter(historyFilter)}
+                    className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
                   >
-                    <button
-                      onClick={() => setDeleteId(slot._id)}
-                      className="absolute top-2 right-2 text-red-600"
-                    >
-                      ✕
-                    </button>
+                    View
+                  </button>
 
-                    <p className="font-semibold">{slot.name}</p>
-                    <p className="text-sm">
-                      Date: {formatDisplayDate(slot.date)}
-                    </p>
-                    <p className="text-sm">Time: {slot.time}</p>
-                    <p className="text-sm">Seats: {slot.totalSeats}</p>
-                  </div>
-                ))
-              ) : (
-                <p className="text-center text-gray-500 col-span-3">
-                  No session history found
-                </p>
-              )}
+                  <button
+                    onClick={() => {
+                      setHistoryFilter({ from: "", to: "" });
+                      setAppliedFilter({ from: "", to: "" });
+                    }}
+                    className="bg-gray-300 px-4 py-2 rounded-lg hover:bg-gray-400 transition"
+                  >
+                    Reset
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* ================= HISTORY CARDS ================= */}
+            <div className="bg-white p-6 rounded-xl shadow">
+              <h2 className="text-xl font-semibold mb-6">
+                {appliedFilter.from || appliedFilter.to
+                  ? `Total Sessions from ${
+                      appliedFilter.from
+                        ? formatDisplayDate(appliedFilter.from)
+                        : "Beginning"
+                    } to ${
+                      appliedFilter.to
+                        ? formatDisplayDate(appliedFilter.to)
+                        : "Today"
+                    }`
+                  : "Session History (Latest 5 Sessions)"}
+              </h2>
+
+              <div className="grid md:grid-cols-2 gap-6">
+                {filteredSlots.length > 0 ? (
+                  filteredSlots.map((slot) => (
+                    <div
+                      key={slot._id}
+                      className="bg-green-50 p-6 rounded-xl shadow space-y-2 relative hover:shadow-md transition"
+                    >
+                      <button
+                        onClick={() => setDeleteId(slot._id)}
+                        className="absolute top-3 right-3 text-red-600"
+                      >
+                        ✕
+                      </button>
+
+                      <p className="text-lg font-semibold">{slot.name}</p>
+
+                      <p>
+                        <strong>Date:</strong> {formatDisplayDate(slot.date)}
+                      </p>
+
+                      <p>
+                        <strong>Time:</strong> {slot.time}
+                      </p>
+
+                      <p>
+                        <strong>Total Seats:</strong> {slot.totalSeats}
+                      </p>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-center text-gray-500 col-span-2">
+                    No session history found
+                  </p>
+                )}
+              </div>
             </div>
           </div>
-        </div>
-      </div>
+        )}
+      </main>
 
       {/* DELETE MODAL */}
       {deleteId && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50 p-4">
-          <div className="bg-white p-6 rounded-xl shadow-lg text-center space-y-4 w-full max-w-sm">
-            <p className="text-lg font-semibold">Delete this session?</p>
-
-            <div className="flex justify-center gap-4">
-              <button
-                onClick={handleDelete}
-                className="bg-red-600 text-white px-5 py-2 rounded-lg"
-              >
-                Delete
-              </button>
-
-              <button
-                onClick={() => setDeleteId(null)}
-                className="bg-gray-300 px-5 py-2 rounded-lg"
-              >
-                Cancel
-              </button>
-            </div>
+        <div className="fixed inset-0 bg-black/40 flex justify-center items-center">
+          <div className="bg-white p-6 rounded-xl">
+            <p>Delete this session?</p>
+            <button
+              onClick={handleDelete}
+              className="bg-red-600 text-white px-4 py-2 rounded mr-3"
+            >
+              Delete
+            </button>
+            <button
+              onClick={() => setDeleteId(null)}
+              className="bg-gray-300 px-4 py-2 rounded"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
