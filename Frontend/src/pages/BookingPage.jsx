@@ -39,16 +39,13 @@ const BookingPage = () => {
       if (showLoading) setLoading(true);
 
       const response = await adminGetSessionsApi();
-      console.log(response);
-      
+      // console.log(response);
 
       const filtered = response
         .filter((s) => {
-         if (!s.date) return false;
-         return (
-             new Date(s.date).toISOString().split("T")[0] === dateValue
-              );
-        });
+          if (!s.date) return false;
+          return new Date(s.date).toISOString().split("T")[0] === dateValue;
+        })
         .sort((a, b) => {
           const parseTime = (timeStr) => {
             if (!timeStr) return 0;
@@ -74,6 +71,7 @@ const BookingPage = () => {
         });
 
       setSessions(filtered);
+      // console.log(filtered);
 
       setSelectedSession((prev) => {
         if (!filtered.length) return null;
@@ -100,24 +98,24 @@ const BookingPage = () => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
 
-useEffect(() => {
-  if (!selectedSession) return;
+  useEffect(() => {
+    if (!selectedSession) return;
 
-  const socket = window.socket;
-  if (!socket) return;
+    const socket = window.socket;
+    if (!socket) return;
 
-  socket.emit("join-session", selectedSession._id);
+    socket.emit("join-session", selectedSession._id);
 
-  const handleSeatUpdate = () => {
-    loadSessions(selectedDate, false);
-  };
+    const handleSeatUpdate = () => {
+      loadSessions(selectedDate, false);
+    };
 
-  socket.on("seat-updated", handleSeatUpdate);
+    socket.on("seat-updated", handleSeatUpdate);
 
-  return () => {
-    socket.off("seat-updated", handleSeatUpdate);
-  };
-}, [selectedSession, loadSessions]);
+    return () => {
+      socket.off("seat-updated", handleSeatUpdate);
+    };
+  }, [selectedSession, loadSessions]);
 
   /* ===============================
      Seat Selection
