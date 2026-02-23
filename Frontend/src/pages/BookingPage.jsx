@@ -140,7 +140,7 @@ const BookingPage = () => {
           seatNumber: lockedSeatRef.current,
         });
       } catch {}
-    }, 250000);
+    }, 10000);
   }, [selectedSession]);
 
   /* ---------- Seat Selection ---------- */
@@ -261,7 +261,7 @@ const BookingPage = () => {
               {loading ? (
                 <SeatSkeleton />
               ) : (
-                <div className="block">
+                <div className="block max-h-[45vh] md:max-h-none overflow-y-auto hide-scrollbar p-4">
                   <SeatGrid
                     totalSeats={selectedSession.totalSeats}
                     bookedSeats={selectedSession.bookedSeats}
@@ -272,14 +272,14 @@ const BookingPage = () => {
                 </div>
               )}
 
-              <div className="text-center mt-10">
-                <p className="mb-4 font-semibold">
+              <div className="fixed bottom-0 left-4 right-4 m-w-full bg-white  p-4 md:static md:shadow-none md:bg-transparent text-center z-50">
+                <p className="mb-3 font-semibold">
                   Selected Seat: {selectedSeat || "None"}
                 </p>
 
                 <button
                   onClick={handleConfirm}
-                  className="bg-green-600 text-white px-8 py-3 rounded-lg"
+                  className="bg-green-600 text-white px-8 py-3 rounded-lg w-full md:w-auto"
                 >
                   Confirm Booking
                 </button>
