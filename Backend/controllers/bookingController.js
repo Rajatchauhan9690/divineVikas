@@ -156,7 +156,7 @@
 //   }
 // };
 
-iimport Session from "../models/session.models.js";
+import Session from "../models/session.models.js";
 import Booking from "../models/booking.models.js";
 import { getIO } from "../socket.js";
 
