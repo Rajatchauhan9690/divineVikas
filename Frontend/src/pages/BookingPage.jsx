@@ -178,7 +178,6 @@ const BookingPage = () => {
           time: selectedSession.time,
           seatNumber: selectedSeat,
         },
-        replace: true,
       });
     } catch (error) {
       console.error("Booking Error:", error);
