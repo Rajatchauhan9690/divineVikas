@@ -6,7 +6,6 @@ const lockedSeatSchema = new mongoose.Schema(
     lockedAt: {
       type: Date,
       default: Date.now,
-      expires: 300, // 5 minutes auto delete
     },
   },
   { _id: false },

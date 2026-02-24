@@ -1,179 +1,46 @@
-// import Session from "../models/session.models.js";
-// import Booking from "../models/booking.models.js";
-// import { getIO } from "../socket.js";
-// import mongoose from "mongoose";
-
-/*
-|--------------------------------------------------------------------------
-| BOOKING CONTROLLER (PRODUCTION READY)
-|--------------------------------------------------------------------------
-*/
-
-// const LOCK_TIME = 5 * 60 * 1000;
-
-/* ===============================
-   LOCK SEAT
-================================ */
-// export const lockSeat = async (req, res) => {
-//   try {
-//     const { sessionId, seatNumber } = req.body;
-
-//     if (!sessionId || seatNumber === undefined) {
-//       return res.status(400).json({
-//         message: "sessionId and seatNumber are required",
-//       });
-//     }
-
-//     const session = await Session.findOneAndUpdate(
-//       {
-//         _id: sessionId,
-//         bookedSeats: { $ne: seatNumber },
-//         "lockedSeats.seatNumber": { $ne: seatNumber },
-//       },
-//       {
-//         $push: {
-//           lockedSeats: {
-//             seatNumber,
-//             lockedAt: new Date(),
-//           },
-//         },
-//         $set: { status: "locked" },
-//       },
-//       { new: true },
-//     );
-
-//     if (!session) {
-//       return res.status(400).json({
-//         message: "Seat not available for locking",
-//       });
-//     }
-
-//     getIO().to(sessionId).emit("seat-updated", sessionId);
-
-//     res.json({ message: "Seat locked successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
-
-/* ===============================
-   UNLOCK SEAT
-================================ */
-// export const unlockSeat = async (req, res) => {
-//   try {
-//     const { sessionId, seatNumber } = req.body;
-
-//     const session = await Session.findByIdAndUpdate(
-//       sessionId,
-//       {
-//         $pull: { lockedSeats: { seatNumber } },
-//         $set: { status: "available" },
-//       },
-//       { new: true },
-//     );
-
-//     if (!session) {
-//       return res.status(404).json({
-//         message: "Session not found",
-//       });
-//     }
-
-//     getIO().to(sessionId).emit("seat-updated", sessionId);
-
-//     res.json({ message: "Seat unlocked successfully" });
-//   } catch (error) {
-//     res.status(500).json({ message: error.message });
-//   }
-// };
-
-/* ===============================
-   BOOK SEAT (FINAL CONFIRMATION)
-================================ */
-// export const bookSeat = async (req, res) => {
-//   const mongoSession = await mongoose.startSession();
-
-//   try {
-//     const { sessionId, seatNumber, userName } = req.body;
-
-//     if (!sessionId || seatNumber === undefined || !userName) {
-//       return res.status(400).json({
-//         message: "sessionId, seatNumber and userName are required",
-//       });
-//     }
-
-//     await mongoSession.startTransaction();
-
-//     const sessionData = await Session.findOne({
-//       _id: sessionId,
-//       bookedSeats: { $ne: seatNumber },
-//       "lockedSeats.seatNumber": seatNumber,
-//     }).session(mongoSession);
-
-//     if (!sessionData) {
-//       throw new Error("Seat not available for booking");
-//     }
-
-//     await Session.updateOne(
-//       { _id: sessionId },
-//       {
-//         $addToSet: { bookedSeats: seatNumber },
-//         $pull: { lockedSeats: { seatNumber } },
-//         $set: { status: "booked" },
-//       },
-//     ).session(mongoSession);
-
-//     const booking = await Booking.create(
-//       [
-//         {
-//           session: sessionId,
-//           seatNumber,
-//           userName,
-//         },
-//       ],
-//       { session: mongoSession },
-//     );
-
-//     await mongoSession.commitTransaction();
-
-//     if (getIO()) {
-//       getIO().to(sessionId).emit("seat-updated", sessionId);
-//     }
-
-//     res.status(201).json({
-//       message: "Seat booked successfully",
-//       booking: booking[0],
-//     });
-//   } catch (error) {
-//     await mongoSession.abortTransaction();
-
-//     console.error("Booking Error:", error);
-
-//     res.status(500).json({
-//       message: error.message || "Booking failed",
-//     });
-//   } finally {
-//     mongoSession.endSession();
-//   }
-// };
-
 import Session from "../models/session.models.js";
 import Booking from "../models/booking.models.js";
 import { getIO } from "../socket.js";
 
 /*
 |--------------------------------------------------------------------------
-| BOOKING CONTROLLER (PRODUCTION CLEAN VERSION)
+| PRODUCTION READY BOOKING CONTROLLER
 |--------------------------------------------------------------------------
 */
 
-const LOCK_TIME = 5 * 60 * 1000;
+/* ===============================
+   LOCK EXPIRY CHECKER
+================================ */
+
+const isLockExpired = (lockedAt) => {
+  return Date.now() - new Date(lockedAt).getTime() > 5 * 60 * 1000;
+};
+
+/* ===============================
+   CLEAN EXPIRED LOCKS HELPER
+================================ */
+
+const cleanupExpiredLocks = async (sessionId) => {
+  const session = await Session.findById(sessionId);
+
+  if (!session) return null;
+
+  session.lockedSeats = session.lockedSeats.filter(
+    (seat) => !isLockExpired(seat.lockedAt),
+  );
+
+  await session.save();
+
+  return session;
+};
 
 /* ===============================
    LOCK SEAT
 ================================ */
+
 export const lockSeat = async (req, res) => {
   try {
-    const { sessionId, seatNumber, unlock } = req.body;
+    const { sessionId, seatNumber } = req.body;
 
     if (!sessionId || seatNumber === undefined) {
       return res.status(400).json({
@@ -181,53 +48,46 @@ export const lockSeat = async (req, res) => {
       });
     }
 
-    // 🔥 Unlock request handling
-    if (unlock) {
-      await Session.updateOne(
-        { _id: sessionId },
-        {
-          $pull: {
-            lockedSeats: { seatNumber },
-          },
-        },
-      );
-
-      return res.json({
-        message: "Seat unlocked successfully",
-      });
-    }
-
-    // 🔥 Lock seat logic
-    const session = await Session.findOneAndUpdate(
-      {
-        _id: sessionId,
-        bookedSeats: { $nin: [seatNumber] },
-        "lockedSeats.seatNumber": { $ne: seatNumber },
-      },
-      {
-        $push: {
-          lockedSeats: {
-            seatNumber,
-            lockedAt: new Date(),
-          },
-        },
-        $set: { status: "locked" },
-      },
-      { new: true },
-    );
+    // Cleanup expired locks first
+    const session = await cleanupExpiredLocks(sessionId);
 
     if (!session) {
-      return res.status(400).json({
-        message: "Seat not available for locking",
+      return res.status(404).json({
+        message: "Session not found",
       });
     }
 
-    getIO().to(sessionId).emit("seat-updated", sessionId);
+    const alreadyBooked = session.bookedSeats.includes(seatNumber);
+
+    const alreadyLocked = session.lockedSeats.some(
+      (seat) => seat.seatNumber === seatNumber,
+    );
+
+    if (alreadyBooked || alreadyLocked) {
+      return res.status(400).json({
+        message: "Seat not available",
+      });
+    }
+
+    session.lockedSeats.push({
+      seatNumber,
+      lockedAt: new Date(),
+    });
+
+    session.status = "locked";
+
+    await session.save();
+
+    if (getIO()) {
+      getIO().to(sessionId).emit("seat-updated", sessionId);
+    }
 
     res.json({
       message: "Seat locked successfully",
     });
   } catch (error) {
+    console.error("Lock Seat Error:", error);
+
     res.status(500).json({
       message: error.message || "Locking failed",
     });
@@ -235,7 +95,7 @@ export const lockSeat = async (req, res) => {
 };
 
 /* ===============================
-   UNLOCK SEAT (Optional API)
+   UNLOCK SEAT
 ================================ */
 
 export const unlockSeat = async (req, res) => {
@@ -248,25 +108,27 @@ export const unlockSeat = async (req, res) => {
       });
     }
 
-    const session = await Session.findOneAndUpdate(
-      {
-        _id: sessionId,
-        "lockedSeats.seatNumber": seatNumber,
-      },
-      {
-        $pull: { lockedSeats: { seatNumber } },
-        $set: { status: "available" },
-      },
-      { new: true },
-    );
+    const session = await Session.findById(sessionId);
 
     if (!session) {
       return res.status(404).json({
-        message: "Seat not found in locked state",
+        message: "Session not found",
       });
     }
 
-    getIO().to(sessionId).emit("seat-updated", sessionId);
+    session.lockedSeats = session.lockedSeats.filter(
+      (seat) => seat.seatNumber !== seatNumber,
+    );
+
+    if (session.lockedSeats.length === 0 && session.bookedSeats.length === 0) {
+      session.status = "available";
+    }
+
+    await session.save();
+
+    if (getIO()) {
+      getIO().to(sessionId).emit("seat-updated", sessionId);
+    }
 
     res.json({
       message: "Seat unlocked successfully",
@@ -290,7 +152,7 @@ export const bookSeat = async (req, res) => {
 
     if (!sessionId || seatNumber === undefined || !userName) {
       return res.status(400).json({
-        message: "sessionId, seatNumber and userName are required",
+        message: "Required fields missing",
       });
     }
 
@@ -298,7 +160,12 @@ export const bookSeat = async (req, res) => {
       {
         _id: sessionId,
         bookedSeats: { $nin: [seatNumber] },
-        "lockedSeats.seatNumber": seatNumber,
+        lockedSeats: {
+          $elemMatch: {
+            seatNumber,
+            lockedAt: { $gte: new Date(Date.now() - 5 * 60 * 1000) },
+          },
+        },
       },
       {
         $addToSet: { bookedSeats: seatNumber },
@@ -320,17 +187,19 @@ export const bookSeat = async (req, res) => {
       userName,
     });
 
-    getIO().to(sessionId).emit("seat-updated", sessionId);
+    if (getIO()) {
+      getIO().to(sessionId).emit("seat-updated", sessionId);
+    }
 
     res.status(201).json({
-      message: "Seat booked successfully",
+      message: "Booking successful",
       booking,
     });
   } catch (error) {
     console.error("Booking Error:", error);
 
     res.status(500).json({
-      message: error.message || "Booking failed",
+      message: "Booking failed",
     });
   }
 };

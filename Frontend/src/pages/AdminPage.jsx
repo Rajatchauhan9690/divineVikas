@@ -151,7 +151,7 @@ const AdminPage = () => {
       });
 
       toast.success("Session created successfully");
-
+      fetchSlots();
       setForm({
         name: "",
         date: getTodayDate(),
@@ -159,8 +159,6 @@ const AdminPage = () => {
       });
       setTimeValue("");
       setPeriod("AM");
-
-      fetchSlots();
     } catch {
       toast.error("Failed to create session");
     }
@@ -170,9 +168,13 @@ const AdminPage = () => {
   const handleDelete = async () => {
     try {
       await adminDeleteSessionApi(deleteId);
+
       toast.success("Deleted successfully");
+
       setDeleteId(null);
-      fetchSlots();
+
+      await fetchSlots();
+      await fetchBookings();
     } catch {
       toast.error("Delete failed");
     }

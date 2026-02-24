@@ -66,6 +66,7 @@ const BookingPage = () => {
         });
 
       setSessions(filtered);
+      console.log(filtered);
 
       setSelectedSession((prev) => {
         if (!filtered.length) return null;
@@ -87,10 +88,23 @@ const BookingPage = () => {
   /* ===============================
      Effects
   ================================= */
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (selectedSession) {
+        loadSessions(selectedDate, false);
+      }
+    }, 30000); // 30 seconds
+
+    return () => clearInterval(interval);
+  }, [selectedSession, selectedDate, loadSessions]);
 
   useEffect(() => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
+
+  const handleSeatUpdate = useCallback(() => {
+    loadSessions(selectedDate, false);
+  }, [loadSessions, selectedDate]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -100,32 +114,17 @@ const BookingPage = () => {
 
     socket.emit("join-session", selectedSession._id);
 
-    const handleSeatUpdate = () => {
-      loadSessions(selectedDate, false);
-    };
-
+    socket.off("seat-updated");
     socket.on("seat-updated", handleSeatUpdate);
 
     return () => {
       socket.off("seat-updated", handleSeatUpdate);
     };
-  }, [selectedSession, loadSessions, selectedDate]);
-
-  /* ===============================
-     Seat Selection
-  ================================= */
+  }, [selectedSession, handleSeatUpdate]);
 
   const handleSeatSelect = async (seatNumber) => {
     try {
       if (!selectedSession) return;
-
-      if (selectedSeat && selectedSeat !== seatNumber) {
-        await lockSeatApi({
-          sessionId: selectedSession._id,
-          seatNumber: selectedSeat,
-          unlock: true,
-        });
-      }
 
       setSelectedSeat(seatNumber);
 
@@ -169,7 +168,7 @@ const BookingPage = () => {
       if (!response) throw new Error("Booking failed");
 
       toast.success("Booking confirmed");
-
+      await loadSessions(selectedDate, false);
       navigate("/checkout", {
         state: {
           sessionId: selectedSession._id,
