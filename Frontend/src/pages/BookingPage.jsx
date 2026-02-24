@@ -7,6 +7,11 @@ import SeatGrid from "../components/booking/SeatGrid";
 import { adminGetSessionsApi, bookSeatApi, lockSeatApi } from "../api/api";
 
 import { getDateLimits, getTodayDate } from "../utils/dateUtils";
+import {
+  setSeatCache,
+  getSeatCache,
+  clearSeatCache,
+} from "../utils/cacheUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
 
 const BookingPage = () => {
@@ -24,6 +29,8 @@ const BookingPage = () => {
 
   const apiLockRef = useRef(false);
   const confirmLockRef = useRef(false);
+  const seatClickLockRef = useRef(false);
+  const bookingClickRef = useRef(false);
 
   useAutoDateSync(setSelectedDate);
 
@@ -38,6 +45,19 @@ const BookingPage = () => {
       apiLockRef.current = true;
 
       if (showLoading) setLoading(true);
+
+      const CACHE_VALIDITY = 30000;
+
+      const cache = getSeatCache();
+
+      if (
+        cache &&
+        cache.date === dateValue &&
+        Date.now() - cache.timestamp < CACHE_VALIDITY
+      ) {
+        setSessions(cache.sessions);
+        return;
+      }
 
       const response = await adminGetSessionsApi();
 
@@ -66,16 +86,11 @@ const BookingPage = () => {
         });
 
       setSessions(filtered);
-      console.log(filtered);
 
-      setSelectedSession((prev) => {
-        if (!filtered.length) return null;
-
-        if (!prev) return filtered[0];
-
-        const exists = filtered.find((s) => s._id === prev._id);
-
-        return exists ? prev : filtered[0];
+      setSeatCache({
+        date: dateValue,
+        sessions: filtered,
+        timestamp: Date.now(),
       });
     } catch {
       toast.error("Failed to load slots");
@@ -86,14 +101,31 @@ const BookingPage = () => {
   }, []);
 
   /* ===============================
+     Default Slot Selection
+  ================================= */
+
+  useEffect(() => {
+    if (!sessions.length) return;
+
+    setSelectedSession((prev) => {
+      if (!prev) return sessions[0];
+
+      const exists = sessions.find((s) => s._id === prev._id);
+
+      return exists ? prev : sessions[0];
+    });
+  }, [sessions]);
+
+  /* ===============================
      Effects
   ================================= */
+
   useEffect(() => {
     const interval = setInterval(() => {
       if (selectedSession) {
         loadSessions(selectedDate, false);
       }
-    }, 30000); // 30 seconds
+    }, 30000);
 
     return () => clearInterval(interval);
   }, [selectedSession, selectedDate, loadSessions]);
@@ -102,9 +134,9 @@ const BookingPage = () => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
 
-  const handleSeatUpdate = useCallback(() => {
-    loadSessions(selectedDate, false);
-  }, [loadSessions, selectedDate]);
+  /* ===============================
+     Socket Listener
+  ================================= */
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -112,19 +144,39 @@ const BookingPage = () => {
     const socket = window.socket;
     if (!socket) return;
 
+    const seatUpdateHandler = (sessionId) => {
+      if (sessionId !== selectedSession._id) return;
+
+      clearSeatCache();
+      loadSessions(selectedDate, false);
+    };
+
     socket.emit("join-session", selectedSession._id);
 
     socket.off("seat-updated");
-    socket.on("seat-updated", handleSeatUpdate);
+    socket.on("seat-updated", seatUpdateHandler);
 
     return () => {
-      socket.off("seat-updated", handleSeatUpdate);
+      socket.emit("leave-session", selectedSession._id);
+      socket.off("seat-updated", seatUpdateHandler);
     };
-  }, [selectedSession, handleSeatUpdate]);
+  }, [selectedSession, selectedDate, loadSessions]);
+
+  /* ===============================
+     Seat Selection
+  ================================= */
 
   const handleSeatSelect = async (seatNumber) => {
     try {
       if (!selectedSession) return;
+
+      if (seatClickLockRef.current) return;
+
+      seatClickLockRef.current = true;
+
+      setTimeout(() => {
+        seatClickLockRef.current = false;
+      }, 300);
 
       setSelectedSeat(seatNumber);
 
@@ -144,9 +196,12 @@ const BookingPage = () => {
 
   const handleConfirm = async () => {
     try {
-      if (confirmLockRef.current) return;
+      if (bookingLoading || confirmLockRef.current || bookingClickRef.current) {
+        return;
+      }
 
       confirmLockRef.current = true;
+      bookingClickRef.current = true;
       setBookingLoading(true);
 
       if (!selectedSession) {
@@ -165,10 +220,30 @@ const BookingPage = () => {
         userName: "Guest User",
       });
 
-      if (!response) throw new Error("Booking failed");
+      if (!response || response.status >= 400) {
+        throw new Error("Booking failed");
+      }
 
       toast.success("Booking confirmed");
+
+      /* Optimistic UI Update */
+      setSessions((prev) =>
+        prev.map((session) =>
+          session._id === selectedSession._id
+            ? {
+                ...session,
+                bookedSeats: [...session.bookedSeats, selectedSeat],
+                lockedSeats: session.lockedSeats.filter(
+                  (seat) => seat.seatNumber !== selectedSeat,
+                ),
+              }
+            : session,
+        ),
+      );
+
+      clearSeatCache();
       await loadSessions(selectedDate, false);
+
       navigate("/checkout", {
         state: {
           sessionId: selectedSession._id,
@@ -178,31 +253,25 @@ const BookingPage = () => {
         },
       });
     } catch (error) {
-      console.error("Booking Error:", error);
       toast.error(
         error?.response?.data?.message || error?.message || "Booking failed",
       );
     } finally {
       confirmLockRef.current = false;
+      bookingClickRef.current = false;
       setBookingLoading(false);
     }
   };
 
-  /* ===============================
-     UI Render
-  ================================= */
-
   return (
     <div className="w-full max-w-7xl mx-auto py-4 md:py-10 px-3 md:px-6 overflow-x-hidden">
       <div className="flex flex-col md:flex-row gap-6 h-full w-full">
-        {/* Sidebar */}
         <div
-          className="w-full md:w-72 bg-white  shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        rounded-xl p-4 h-[23vh] max-h-[calc(100vh-90px)] md:h-auto overflow-y-auto overflow-x-hidden hide-scrollbar"
+          className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]
+        rounded-xl p-4 h-[23vh] md:h-auto max-h-[calc(100vh-90px)]
+        overflow-y-auto overflow-x-hidden hide-scrollbar"
         >
-          <h3 className="text-lg font-bold text-center mb-3 md:mb-4">
-            Select Date
-          </h3>
+          <h3 className="text-lg font-bold text-center mb-3">Select Date</h3>
 
           <input
             type="date"
@@ -210,16 +279,16 @@ const BookingPage = () => {
             min={minDate}
             max={maxDate}
             onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full border rounded-lg p-2 md:p-3 mb-4 md:mb-6 text-sm md:text-base"
+            className="w-full border rounded-lg p-2 mb-4"
           />
 
-          <h3 className="text-lg font-bold text-center mb-3 md:mb-4">
+          <h3 className="text-lg font-bold text-center mb-3">
             Meditation Slots
           </h3>
 
-          <div className="flex md:flex-col gap-2 md:gap-3 overflow-x-auto hide-scrollbar pb-2">
+          <div className="flex md:flex-col gap-2 overflow-x-auto hide-scrollbar pb-2">
             {loading ? (
-              <div className="w-full h-[200px] flex items-center justify-center">
+              <div className="w-full h-[100px] flex items-center justify-center">
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : sessions.length === 0 ? (
@@ -231,7 +300,7 @@ const BookingPage = () => {
                 <button
                   key={session._id}
                   onClick={() => setSelectedSession(session)}
-                  className={`border rounded-lg p-2 md:p-3 transition min-w-[90px] md:w-full text-sm md:text-base ${
+                  className={`border rounded-lg p-2 transition min-w-[90px] md:w-full text-md ${
                     selectedSession?._id === session._id
                       ? "bg-green-500 text-white"
                       : "bg-white hover:bg-green-50"
@@ -244,18 +313,18 @@ const BookingPage = () => {
           </div>
         </div>
 
-        {/* Main Section */}
         <div
           className="flex-1 w-full bg-white rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        p-4 md:p-6 h-[75vh]  max-h-[calc(100vh-90px)] md:h-auto overflow-y-auto overflow-x-hidden hide-scrollbar pb-30 md:pb-6"
+        p-4 max-h-[calc(100vh-90px)]
+        overflow-y-auto overflow-x-hidden hide-scrollbar"
         >
           {!selectedSession ? (
-            <div className="h-[500px]  flex items-center justify-center text-gray-400 text-sm md:text-base">
+            <div className="h-[500px] flex items-center justify-center text-gray-400 text-sm">
               No available slots
             </div>
           ) : (
             <>
-              <h2 className="text-xl md:text-2xl font-bold text-center mb-4 md:mb-6">
+              <h2 className="text-xl md:text-2xl font-bold text-center mb-6">
                 Select Your Seat
               </h2>
 
@@ -267,24 +336,19 @@ const BookingPage = () => {
                 onSeatSelect={handleSeatSelect}
               />
 
-              <div className="fixed bottom-0 left-4 right-4 bg-white p-4 shadow-lg md:static md:shadow-none text-center z-50">
-                <p className="mb-2 md:mb-3 font-semibold text-sm md:text-base">
-                  Selected Seat: {selectedSeat || "None"}
-                </p>
-
-                <div className="mt-auto bg-white p-4 shadow-lg md:shadow-none z-50 flex justify-center">
-                  <button
-                    onClick={handleConfirm}
-                    disabled={bookingLoading}
-                    className="bg-green-600 text-white px-6 py-2 md:px-8 md:py-3 
-                         rounded-lg w-full md:w-auto text-sm md:text-base flex items-center justify-center gap-2"
-                  >
-                    {bookingLoading && (
-                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                    )}
-                    {bookingLoading ? "Booking..." : "Confirm Booking"}
-                  </button>
-                </div>
+              <div className="mt-6 flex justify-center">
+                <button
+                  onClick={handleConfirm}
+                  disabled={bookingLoading}
+                  className={`bg-green-600 text-white px-6 py-2 rounded-lg w-full md:w-auto text-sm flex items-center justify-center gap-2 transition ${
+                    bookingLoading ? "opacity-50 " : "opacity-100"
+                  }`}
+                >
+                  {bookingLoading && (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  )}
+                  {bookingLoading ? "Booking..." : "Confirm Booking"}
+                </button>
               </div>
             </>
           )}
