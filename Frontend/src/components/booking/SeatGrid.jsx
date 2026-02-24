@@ -18,7 +18,7 @@ const SeatGrid = ({
   });
 
   return (
-    <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-10 gap-3 max-w-4xl mx-auto">
+    <div className="grid grid-cols-6 sm:grid-cols-6 md:grid-cols-10 lg:grid-cols-15 gap-3 max-w-4xl mx-auto">
       {seats.map((seat) => (
         <Seat
           key={seat.number}
