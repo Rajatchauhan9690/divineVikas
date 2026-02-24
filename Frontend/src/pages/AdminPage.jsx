@@ -1,21 +1,35 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
+
 import {
   adminCreateSessionApi,
   adminGetSessionsApi,
   adminDeleteSessionApi,
   adminGetAllBookingsApi,
 } from "../api/api";
+
 import { ToastContainer, toast } from "react-toastify";
 import { getTodayDate, formatDisplayDate } from "../utils/dateUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
+import { parseSessionTime } from "../utils/timeUtils";
+
+/* =========================================================
+   ADMIN PAGE (OPTIMIZED VERSION)
+========================================================= */
 
 const AdminPage = () => {
+  /* ---------------- STATES ---------------- */
+
   const [activeTab, setActiveTab] = useState("create");
+  const [isCreating, setIsCreating] = useState(false);
+
   const [slots, setSlots] = useState([]);
   const [bookings, setBookings] = useState([]);
+
   const [deleteId, setDeleteId] = useState(null);
+
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
+  /* Form */
   const [form, setForm] = useState({
     name: "",
     date: getTodayDate(),
@@ -25,30 +39,24 @@ const AdminPage = () => {
   const [timeValue, setTimeValue] = useState("");
   const [period, setPeriod] = useState("AM");
 
-  const [historyFilter, setHistoryFilter] = useState({
-    from: "",
-    to: "",
-  });
-  const [appliedFilter, setAppliedFilter] = useState({
-    from: "",
-    to: "",
-  });
-  const [bookingFilter, setBookingFilter] = useState({
-    from: "",
-    to: "",
-  });
+  /* Filters */
+  const [historyFilter, setHistoryFilter] = useState({ from: "", to: "" });
+  const [appliedFilter, setAppliedFilter] = useState({ from: "", to: "" });
 
+  const [bookingFilter, setBookingFilter] = useState({ from: "", to: "" });
   const [appliedBookingFilter, setAppliedBookingFilter] = useState({
     from: "",
     to: "",
   });
 
   /* ---------------- AUTO DATE SYNC ---------------- */
+
   useAutoDateSync((newDate) => {
     setForm((prev) => ({ ...prev, date: newDate }));
   });
 
-  /* ---------------- FETCH ---------------- */
+  /* ---------------- DATA LOADERS ---------------- */
+
   const fetchSlots = useCallback(async () => {
     try {
       const data = await adminGetSessionsApi();
@@ -67,21 +75,25 @@ const AdminPage = () => {
     }
   }, []);
 
-  useEffect(() => {
-    fetchSlots();
-    fetchBookings();
+  const loadData = useCallback(async () => {
+    await Promise.all([fetchSlots(), fetchBookings()]);
   }, [fetchSlots, fetchBookings]);
 
-  /* ---------------- CALCULATIONS ---------------- */
-  const totalSlots = slots.length;
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  const totalSeats = useMemo(() => {
-    return slots.reduce((sum, slot) => sum + Number(slot.totalSeats || 0), 0);
-  }, [slots]);
+  /* ---------------- FORM HANDLERS ---------------- */
 
-  const totalBookedSeats = bookings.length;
+  const handleChange = useCallback((e) => {
+    setForm((prev) => ({
+      ...prev,
+      [e.target.name]: e.target.value,
+    }));
+  }, []);
 
-  /* ---------------- TIME HANDLER ---------------- */
+  /* ---------------- TIME INPUT HANDLER ---------------- */
+
   const handleTimeChange = (e) => {
     let value = e.target.value.replace(/\D/g, "");
 
@@ -94,13 +106,9 @@ const AdminPage = () => {
       minute = value.slice(2, 3) + "0";
     }
 
-    if (value.length >= 2) {
-      hour = hour.padStart(2, "0");
-    }
-
+    if (value.length >= 2) hour = hour.padStart(2, "0");
     if (minute.length === 1) minute = minute + "0";
 
-    // ✅ Validate only when user completes 4 digits
     if (value.length === 4) {
       if (Number(hour) === 0 || Number(hour) > 12) {
         toast.error("Hour must be between 01 and 12");
@@ -119,6 +127,8 @@ const AdminPage = () => {
     setTimeValue(value);
   };
 
+  /* ---------------- FORM VALIDATION ---------------- */
+
   const isFormValid = useMemo(() => {
     if (!form.name.trim()) return false;
     if (!form.date) return false;
@@ -126,103 +136,127 @@ const AdminPage = () => {
     if (!timeValue.includes(":")) return false;
 
     const [hour, minute] = timeValue.split(":");
-    if (!hour || !minute) return false;
+
     if (Number(hour) < 1 || Number(hour) > 12) return false;
     if (Number(minute) < 0 || Number(minute) > 59) return false;
 
     return true;
   }, [form, timeValue]);
 
-  const handleChange = (e) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
-  };
+  /* ---------------- DATE RANGE CHECKER ---------------- */
+
+  const getDateRange = useCallback((itemDate, from, to) => {
+    const d = new Date(itemDate);
+
+    if (from && d < new Date(from)) return false;
+    if (to && d > new Date(to)) return false;
+
+    return true;
+  }, []);
 
   /* ---------------- CREATE SESSION ---------------- */
-  const handleAddSlot = async () => {
-    if (!isFormValid) return toast.error("Please enter valid time");
+
+  const handleAddSlot = useCallback(async () => {
+    if (!isFormValid || isCreating) return;
+
+    setIsCreating(true);
 
     try {
+      const fullTime = `${timeValue} ${period}`;
+
       await adminCreateSessionApi({
         ...form,
-        time: `${timeValue} ${period}`,
+        time: fullTime,
+        timeValueParsed: parseSessionTime(fullTime),
         totalSeats: Number(form.totalSeats),
         bookedSeats: [],
         lockedSeats: [],
       });
 
       toast.success("Session created successfully");
-      fetchSlots();
+
+      await loadData();
+
       setForm({
         name: "",
         date: getTodayDate(),
         totalSeats: "",
       });
+
       setTimeValue("");
       setPeriod("AM");
     } catch {
       toast.error("Failed to create session");
+    } finally {
+      setIsCreating(false);
     }
-  };
+  }, [form, timeValue, period, isFormValid, isCreating, loadData]);
 
   /* ---------------- DELETE SESSION ---------------- */
-  const handleDelete = async () => {
+
+  const handleDelete = useCallback(async () => {
+    if (!deleteId) return;
+
     try {
       await adminDeleteSessionApi(deleteId);
 
       toast.success("Deleted successfully");
 
       setDeleteId(null);
-
-      await fetchSlots();
-      await fetchBookings();
+      loadData();
     } catch {
       toast.error("Delete failed");
     }
-  };
+  }, [deleteId, loadData]);
 
-  /* ---------------- HISTORY FILTER ---------------- */
+  /* ---------------- FILTERS ---------------- */
+
   const filteredSlots = useMemo(() => {
-    const sorted = [...slots].sort(
-      (a, b) => new Date(b.date) - new Date(a.date),
-    );
+    const sorted = slots.slice().sort((a, b) => {
+      const dateDiff = new Date(b.date) - new Date(a.date);
 
-    if (!appliedFilter.from && !appliedFilter.to) return sorted.slice(0, 5);
+      if (dateDiff !== 0) return dateDiff;
 
-    return sorted.filter((slot) => {
-      const slotDate = new Date(slot.date);
-      const fromDate = appliedFilter.from ? new Date(appliedFilter.from) : null;
-      const toDate = appliedFilter.to ? new Date(appliedFilter.to) : null;
-
-      if (fromDate && slotDate < fromDate) return false;
-      if (toDate && slotDate > toDate) return false;
-
-      return true;
+      return parseSessionTime(a.time) - parseSessionTime(b.time);
     });
-  }, [slots, appliedFilter]);
-  const filteredBookings = useMemo(() => {
-    const sorted = [...bookings].sort(
-      (a, b) => new Date(b.createdAt) - new Date(a.createdAt),
-    );
 
-    if (!appliedBookingFilter.from && !appliedBookingFilter.to) {
-      return sorted.slice(0, 5); // latest 5 bookings
+    if (!appliedFilter.from && !appliedFilter.to) {
+      return sorted.slice(0, 5);
     }
 
-    return sorted.filter((booking) => {
-      const bookingDate = new Date(booking.createdAt);
-      const fromDate = appliedBookingFilter.from
-        ? new Date(appliedBookingFilter.from)
-        : null;
-      const toDate = appliedBookingFilter.to
-        ? new Date(appliedBookingFilter.to)
-        : null;
+    return sorted.filter((slot) =>
+      getDateRange(slot.date, appliedFilter.from, appliedFilter.to),
+    );
+  }, [slots, appliedFilter, getDateRange]);
 
-      if (fromDate && bookingDate < fromDate) return false;
-      if (toDate && bookingDate > toDate) return false;
+  const filteredBookings = useMemo(() => {
+    const sorted = bookings
+      .slice()
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
-      return true;
-    });
-  }, [bookings, appliedBookingFilter]);
+    if (!appliedBookingFilter.from && !appliedBookingFilter.to) {
+      return sorted.slice(0, 5);
+    }
+
+    return sorted.filter((b) =>
+      getDateRange(
+        b.createdAt,
+        appliedBookingFilter.from,
+        appliedBookingFilter.to,
+      ),
+    );
+  }, [bookings, appliedBookingFilter, getDateRange]);
+
+  /* ---------------- STATS ---------------- */
+
+  const totalSlots = slots.length;
+
+  const totalSeats = useMemo(() => {
+    return slots.reduce((sum, slot) => sum + Number(slot.totalSeats || 0), 0);
+  }, [slots]);
+
+  const totalBookedSeats = bookings.length;
+
   /* ================= RENDER ================= */
   return (
     <div className="min-h-screen flex bg-gray-100">
@@ -362,14 +396,14 @@ const AdminPage = () => {
 
             <button
               onClick={handleAddSlot}
-              disabled={!isFormValid}
+              disabled={!isFormValid || isCreating}
               className={`px-6 py-3 rounded-lg transition ${
-                isFormValid
+                isFormValid && !isCreating
                   ? "bg-green-600 hover:bg-green-700 text-white"
                   : "bg-gray-300 text-gray-500 cursor-not-allowed"
               }`}
             >
-              Create Session
+              {isCreating ? "Creating..." : "Create Session"}
             </button>
           </div>
         )}

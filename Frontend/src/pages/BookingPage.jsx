@@ -12,6 +12,7 @@ import {
   getSeatCache,
   clearSeatCache,
 } from "../utils/cacheUtils";
+import { parseSessionTime } from "../utils/timeUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
 
 const BookingPage = () => {
@@ -67,22 +68,7 @@ const BookingPage = () => {
           return new Date(s.date).toISOString().split("T")[0] === dateValue;
         })
         .sort((a, b) => {
-          const parseTime = (timeStr) => {
-            if (!timeStr) return 0;
-
-            let [time, modifier] = timeStr.split(" ");
-            let [hour, minute = "0"] = time.split(":");
-
-            hour = Number(hour);
-            minute = Number(minute);
-
-            if (modifier?.toUpperCase() === "PM" && hour !== 12) hour += 12;
-            if (modifier?.toUpperCase() === "AM" && hour === 12) hour = 0;
-
-            return hour * 60 + minute;
-          };
-
-          return parseTime(a.time) - parseTime(b.time);
+          return parseSessionTime(a.time) - parseSessionTime(b.time);
         });
 
       setSessions(filtered);
@@ -103,36 +89,44 @@ const BookingPage = () => {
   /* ===============================
      Default Slot Selection
   ================================= */
+  /* ===============================
+   Default Session Selection
+================================ */
 
   useEffect(() => {
-    if (!sessions.length) return;
+    if (!sessions.length) {
+      setSelectedSession(null);
+      return;
+    }
 
     setSelectedSession((prev) => {
       if (!prev) return sessions[0];
 
-      const exists = sessions.find((s) => s._id === prev._id);
-
-      return exists ? prev : sessions[0];
+      return sessions.find((s) => s._id === prev._id) || sessions[0];
     });
   }, [sessions]);
 
   /* ===============================
-     Effects
-  ================================= */
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (selectedSession) {
-        loadSessions(selectedDate, false);
-      }
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [selectedSession, selectedDate, loadSessions]);
+   Load Sessions When Date Changes
+================================ */
 
   useEffect(() => {
     loadSessions(selectedDate);
   }, [selectedDate, loadSessions]);
+
+  /* ===============================
+   Auto Refresh Session Data
+================================ */
+
+  useEffect(() => {
+    if (!selectedSession) return;
+
+    const interval = setInterval(() => {
+      loadSessions(selectedDate, false);
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [selectedSession, selectedDate, loadSessions]);
 
   /* ===============================
      Socket Listener
