@@ -1,4 +1,3 @@
-import { FixedSizeGrid as Grid } from "react-window";
 import Seat from "./Seat";
 
 const SeatGrid = ({
@@ -8,50 +7,28 @@ const SeatGrid = ({
   selectedSeat,
   onSeatSelect,
 }) => {
-  const columns = 12; // adjust for desktop layout
+  const seats = Array.from({ length: totalSeats }, (_, i) => {
+    const seatNumber = i + 1;
 
-  const rows = Math.ceil(totalSeats / columns);
-
-  const seatMap = new Map();
-
-  bookedSeats.forEach((seat) => seatMap.set(seat, "booked"));
-
-  lockedSeats.forEach((seat) => seatMap.set(seat.seatNumber, "locked"));
+    return {
+      number: seatNumber,
+      booked: bookedSeats?.includes(seatNumber),
+      locked: lockedSeats?.some((s) => s.seatNumber === seatNumber),
+    };
+  });
 
   return (
-    <div className="flex justify-center">
-      <Grid
-        columnCount={columns}
-        rowCount={rows}
-        columnWidth={70}
-        rowHeight={70}
-        height={600}
-        width={900}
-      >
-        {({ columnIndex, rowIndex, style }) => {
-          const seatNumber = rowIndex * columns + columnIndex + 1;
-
-          if (seatNumber > totalSeats) return null;
-
-          const status = seatMap.get(seatNumber);
-
-          const seat = {
-            number: seatNumber,
-            booked: status === "booked",
-            locked: status === "locked",
-          };
-
-          return (
-            <div style={style} className="flex justify-center items-center">
-              <Seat
-                seat={seat}
-                isSelected={selectedSeat === seatNumber}
-                onSeatSelect={onSeatSelect}
-              />
-            </div>
-          );
-        }}
-      </Grid>
+    <div className="max-w-5xl mx-auto px-4 pb-15 md:pb-0">
+      <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-3">
+        {seats.map((seat) => (
+          <Seat
+            key={seat.number}
+            seat={seat}
+            isSelected={selectedSeat === seat.number}
+            onSeatSelect={onSeatSelect}
+          />
+        ))}
+      </div>
     </div>
   );
 };

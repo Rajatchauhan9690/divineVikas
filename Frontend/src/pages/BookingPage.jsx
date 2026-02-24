@@ -282,7 +282,7 @@ const BookingPage = () => {
 
           <div className="flex md:flex-col gap-2 overflow-x-auto hide-scrollbar pb-2">
             {loading ? (
-              <div className="w-full h-[100px] flex items-center justify-center">
+              <div className="w-full h-[50px] md:h-[100px] flex items-center justify-center">
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
             ) : sessions.length === 0 ? (
