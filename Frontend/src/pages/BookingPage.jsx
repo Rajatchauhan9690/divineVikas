@@ -198,8 +198,8 @@ const BookingPage = () => {
       <div className="flex flex-col md:flex-row gap-6 h-full w-full">
         {/* Sidebar */}
         <div
-          className="w-full md:w-72 bg-white shadow-lg shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        rounded-xl p-4 h-[23vh] md:h-[calc(100vh-90px)] overflow-y-auto overflow-x-hidden hide-scrollbar"
+          className="w-full md:w-72 bg-white  shadow-[0_0_20px_rgba(0,0,0,0.15)]
+        rounded-xl p-4 h-[23vh] max-h-[calc(100vh-90px)] md:h-auto overflow-y-auto overflow-x-hidden hide-scrollbar"
         >
           <h3 className="text-lg font-bold text-center mb-3 md:mb-4">
             Select Date
@@ -248,10 +248,10 @@ const BookingPage = () => {
         {/* Main Section */}
         <div
           className="flex-1 w-full bg-white rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        p-4 md:p-6 h-[75vh]  md:h-[calc(100vh-90px)] overflow-y-auto overflow-x-hidden hide-scrollbar pb-30 md:pb-6"
+        p-4 md:p-6 h-[75vh]  max-h-[calc(100vh-90px)] md:h-auto overflow-y-auto overflow-x-hidden hide-scrollbar pb-30 md:pb-6"
         >
           {!selectedSession ? (
-            <div className="h-[300px] md:h-[400px] flex items-center justify-center text-gray-400 text-sm md:text-base">
+            <div className="h-[500px]  flex items-center justify-center text-gray-400 text-sm md:text-base">
               No available slots
             </div>
           ) : (
