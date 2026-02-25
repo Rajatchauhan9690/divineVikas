@@ -185,7 +185,8 @@ export const cashfreeWebhook = async (req, res) => {
 
     const booking = payment.booking;
 
-    const orderStatus = event?.data?.payment?.payment_status;
+    const orderStatus =
+      event?.data?.order?.order_status || event?.data?.payment?.payment_status;
 
     console.log("Payment gateway status:", orderStatus);
 
@@ -195,7 +196,7 @@ export const cashfreeWebhook = async (req, res) => {
     =============================
     */
 
-    if (orderStatus === "SUCCESS") {
+    if (["SUCCESS", "PAID", "COMPLETED"].includes(orderStatus)) {
       console.log("✅ Payment SUCCESS block executed");
 
       payment.status = "PAID";
@@ -261,8 +262,9 @@ export const cashfreeWebhook = async (req, res) => {
 
       console.log("Webhook log marked PROCESSED");
     }
-
-    return res.sendStatus(200);
+    return res.status(200).json({
+      received: true,
+    });
   } catch (error) {
     console.error("🔥 Webhook Error:", error.message);
 
