@@ -7,12 +7,17 @@ const API = axios.create({
 
 /* =====================================================
    BOOKING APIs
-   Base: /api/bookings
 ===================================================== */
 
 // Book seat
 export const bookSeatApi = async (data) => {
-  const res = await API.post("/api/bookings", data);
+  const res = await API.post("/api/bookings/create", data);
+  return res.data;
+};
+
+// Cancel booking
+export const cancelBookingApi = async (bookingId) => {
+  const res = await API.delete(`/api/bookings/cancel/${bookingId}`);
   return res.data;
 };
 
@@ -28,54 +33,48 @@ export const unlockSeatApi = async (data) => {
   return res.data;
 };
 
+// Get all bookings
+export const getAllBookingsApi = async () => {
+  const res = await API.get("/api/bookings/booking");
+  return res.data;
+};
+
 /* =====================================================
    PAYMENT APIs
-   Base: /api/payment
 ===================================================== */
 
 // Create payment
 export const createPaymentApi = async (data) => {
-  const res = await API.post("/api/payment", data);
-  return res.data;
-};
-
-// Verify payment
-export const verifyPaymentApi = async (data) => {
-  const res = await API.post("/api/payment/verify", data);
+  const res = await API.post("/api/payment/create", data);
   return res.data;
 };
 
 /* =====================================================
-   ADMIN APIs
-   Base: /api/admin
+   SESSION APIs
 ===================================================== */
 
-// Admin create session
-export const adminCreateSessionApi = async (data) => {
-  const res = await API.post("/api/admin/session", data);
+// Create session
+export const createSessionApi = async (data) => {
+  const res = await API.post("/api/session/create", data);
   return res.data;
 };
 
 // Delete session
-export const adminDeleteSessionApi = async (id) => {
-  const res = await API.delete(`/api/admin/session/${id}`);
+export const deleteSessionApi = async (id) => {
+  const res = await API.delete(`/api/session/delete/${id}`);
   return res.data;
 };
 
-// Get admin sessions
-export const adminGetSessionsApi = async () => {
-  const res = await API.get("/api/admin/sessions");
-  return res.data;
-};
-// Get admin single session
-export const adminGetSingleSessionApi = async (id) => {
-  const res = await API.get(`/api/admin/session/${id}`);
+// Get sessions
+export const getSessionsApi = async () => {
+  const res = await API.get("/api/session/get");
   return res.data;
 };
 
-// Get all bookings (Admin)
-export const adminGetAllBookingsApi = async () => {
-  const res = await API.get("/api/admin/bookings");
+// Get single session
+export const getSingleSessionApi = async (id) => {
+  const res = await API.get(`/api/session/get-single/${id}`);
   return res.data;
 };
+
 export default API;

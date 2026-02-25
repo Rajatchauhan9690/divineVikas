@@ -4,7 +4,7 @@ import { toast } from "react-toastify";
 
 import SeatGrid from "../components/booking/SeatGrid";
 
-import { adminGetSessionsApi, bookSeatApi, lockSeatApi } from "../api/api";
+import { getSessionsApi, bookSeatApi, lockSeatApi } from "../api/api";
 
 import { getDateLimits, getTodayDate } from "../utils/dateUtils";
 import {
@@ -12,6 +12,7 @@ import {
   getSeatCache,
   clearSeatCache,
 } from "../utils/cacheUtils";
+x;
 import { parseSessionTime } from "../utils/timeUtils";
 import useAutoDateSync from "../hooks/useAutoDateSync";
 
@@ -160,99 +161,46 @@ const BookingPage = () => {
      Seat Selection
   ================================= */
 
-  const handleSeatSelect = async (seatNumber) => {
-    try {
-      if (!selectedSession) return;
-
-      if (seatClickLockRef.current) return;
-
-      seatClickLockRef.current = true;
-
-      setTimeout(() => {
-        seatClickLockRef.current = false;
-      }, 300);
-
-      setSelectedSeat(seatNumber);
-
-      await lockSeatApi({
-        sessionId: selectedSession._id,
-        seatNumber,
-      });
-    } catch {
-      toast.error("Seat lock failed");
-      setSelectedSeat(null);
-    }
+  const handleSeatSelect = (seatNumber) => {
+    if (!selectedSession) return;
+    setSelectedSeat(seatNumber); // Only UI selection
   };
 
   /* ===============================
      Confirm Booking
   ================================= */
-
   const handleConfirm = async () => {
     try {
-      if (bookingLoading || confirmLockRef.current || bookingClickRef.current) {
+      if (bookingLoading) return;
+
+      if (!selectedSession || !selectedSeat) {
+        toast.error("Select slot and seat");
         return;
       }
 
-      confirmLockRef.current = true;
-      bookingClickRef.current = true;
       setBookingLoading(true);
 
-      if (!selectedSession) {
-        toast.error("Select a slot");
-        return;
-      }
-
-      if (!selectedSeat) {
-        toast.error("Select a seat");
-        return;
-      }
-
-      const response = await bookSeatApi({
+      // Lock seat first
+      const lockRes = await lockSeatApi({
         sessionId: selectedSession._id,
         seatNumber: selectedSeat,
-        userName: "Guest User",
       });
 
-      if (!response || response.status >= 400) {
-        throw new Error("Booking failed");
+      if (!lockRes?.success) {
+        toast.error(lockRes?.message || "Seat already taken");
+        return;
       }
 
-      toast.success("Booking confirmed");
-
-      /* Optimistic UI Update */
-      setSessions((prev) =>
-        prev.map((session) =>
-          session._id === selectedSession._id
-            ? {
-                ...session,
-                bookedSeats: [...session.bookedSeats, selectedSeat],
-                lockedSeats: session.lockedSeats.filter(
-                  (seat) => seat.seatNumber !== selectedSeat,
-                ),
-              }
-            : session,
-        ),
-      );
-
-      clearSeatCache();
-      await loadSessions(selectedDate, false);
-
+      // Navigate checkout ONLY
       navigate("/checkout", {
         state: {
           sessionId: selectedSession._id,
-          date: selectedDate,
-          time: selectedSession.time,
           seatNumber: selectedSeat,
         },
       });
-    } catch (error) {
-      toast.error(
-        error?.response?.data?.message || error?.message || "Booking failed",
-      );
+    } catch {
+      toast.error("Booking failed");
     } finally {
-      confirmLockRef.current = false;
-      bookingClickRef.current = false;
       setBookingLoading(false);
     }
   };

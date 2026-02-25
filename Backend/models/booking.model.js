@@ -12,7 +12,11 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-
+    status: {
+      type: String,
+      enum: ["PENDING", "CONFIRMED", "FAILED"],
+      default: "PENDING",
+    },
     userName: {
       type: String,
       required: true,
@@ -23,6 +27,6 @@ const bookingSchema = new mongoose.Schema(
 );
 
 // Optional index for faster lookup
-bookingSchema.index({ session: 1, seatNumber: 1 });
+bookingSchema.index({ session: 1, seatNumber: 1 }, { unique: true });
 
 export default mongoose.model("Booking", bookingSchema);

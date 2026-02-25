@@ -1,10 +1,11 @@
 import React, { useEffect, useState, useMemo, useCallback } from "react";
 
 import {
-  adminCreateSessionApi,
-  adminGetSessionsApi,
-  adminDeleteSessionApi,
-  adminGetAllBookingsApi,
+  createSessionApi,
+  getSessionsApi,
+  deleteSessionApi,
+  getAllBookingsApi,
+  getSingleSessionApi,
 } from "../api/api";
 
 import { ToastContainer, toast } from "react-toastify";
@@ -59,7 +60,7 @@ const AdminPage = () => {
 
   const fetchSlots = useCallback(async () => {
     try {
-      const data = await adminGetSessionsApi();
+      const data = await getSessionsApi();
       setSlots(data || []);
     } catch {
       toast.error("Slot fetch failed");
@@ -68,7 +69,7 @@ const AdminPage = () => {
 
   const fetchBookings = useCallback(async () => {
     try {
-      const res = await adminGetAllBookingsApi();
+      const res = await getAllBookingsApi();
       setBookings(res || []);
     } catch {
       toast.error("Booking fetch failed");
@@ -164,7 +165,7 @@ const AdminPage = () => {
     try {
       const fullTime = `${timeValue} ${period}`;
 
-      await adminCreateSessionApi({
+      await createSessionApi({
         ...form,
         time: fullTime,
         timeValueParsed: parseSessionTime(fullTime),
@@ -198,7 +199,7 @@ const AdminPage = () => {
     if (!deleteId) return;
 
     try {
-      await adminDeleteSessionApi(deleteId);
+      await deleteSessionApi(deleteId);
 
       toast.success("Deleted successfully");
 

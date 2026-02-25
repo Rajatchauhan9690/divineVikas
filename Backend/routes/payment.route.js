@@ -1,14 +1,18 @@
 import express from "express";
 import {
   createPayment,
-  verifyPayment,
   cashfreeWebhook,
-} from "../controllers/paymentController.js";
+} from "../controllers/payment.controller.js";
 
 const router = express.Router();
 
-router.post("/", createPayment);
-router.post("/verify", verifyPayment);
+/*
+================================
+PAYMENT ROUTES
+================================
+*/
+
+router.post("/create", createPayment);
 router.post("/webhook", cashfreeWebhook);
 
 export default router;
