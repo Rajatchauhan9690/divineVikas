@@ -11,25 +11,36 @@ export default function PaymentSuccess() {
   const [status, setStatus] = useState("VERIFYING");
 
   useEffect(() => {
+    if (!orderId) return;
+
+    let retryCount = 0;
+    const maxRetry = 3;
+
     const verifyPayment = async () => {
       try {
         const res = await verifyPaymentApi({ orderId });
 
         console.log("Verify payment response:", res);
 
-        // if (res.status === "PAID" || res.success)
         if (res?.status === "PAID") {
           setStatus("SUCCESS");
-        } else {
-          setStatus("FAILED");
+          return;
         }
+
+        if (res?.status === "PENDING" && retryCount < maxRetry) {
+          retryCount++;
+          setTimeout(verifyPayment, 2000);
+          return;
+        }
+
+        setStatus("FAILED");
       } catch (error) {
         console.error(error);
         setStatus("FAILED");
       }
     };
 
-    if (orderId) verifyPayment();
+    verifyPayment();
   }, [orderId]);
 
   if (status === "VERIFYING") {
