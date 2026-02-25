@@ -2,18 +2,14 @@ import axios from "axios";
 import Payment from "../models/payment.model.js";
 import Booking from "../models/booking.model.js";
 import Session from "../models/session.model.js";
-import { getIO } from "../socket/socket.js";
-
+import WebhookLog from "../models/webhookLog.model.js";
 /*
 =====================================
-PAYMENT CONTROLLER
+CREATE PAYMENT ORDER
 =====================================
 */
-
 export const createPayment = async (req, res) => {
   try {
-    console.log("💳 Payment Order Request:", req.body);
-
     const { sessionId, seatNumber, amount } = req.body;
 
     const booking = await Booking.findOne({
@@ -49,7 +45,7 @@ export const createPayment = async (req, res) => {
       },
     );
 
-    const paymentSessionId = response?.data?.payment_session_id;
+    const paymentSessionId = response?.data?.payment_session_id?.trim();
 
     if (!paymentSessionId) throw new Error("Payment session creation failed");
 
@@ -62,15 +58,13 @@ export const createPayment = async (req, res) => {
       status: "PENDING",
     });
 
-    console.log("✅ Payment Order Created:", orderId);
-
     res.json({
       success: true,
       orderId,
       payment_session_id: paymentSessionId,
     });
   } catch (error) {
-    console.error("❌ Payment Order Error:", error.message);
+    console.error("❌ Create Payment Error:", error.message);
 
     res.status(500).json({
       success: false,
@@ -78,16 +72,60 @@ export const createPayment = async (req, res) => {
     });
   }
 };
+export const verifyPayment = async (req, res) => {
+  try {
+    const { orderId } = req.body;
+
+    const payment = await Payment.findOne({ orderId });
+
+    if (!payment) {
+      return res.status(404).json({
+        success: false,
+        message: "Payment not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      status: payment.status,
+      transactionId: payment.transactionId,
+    });
+  } catch (error) {
+    console.error("Verify Payment Error:", error.message);
+
+    res.status(500).json({
+      success: false,
+      message: "Verification failed",
+    });
+  }
+};
+/*
+=====================================
+WEBHOOK HANDLER (PRODUCTION STYLE)
+=====================================
+*/
 
 export const cashfreeWebhook = async (req, res) => {
-  try {
-    console.log("🌐 Webhook Received:", JSON.stringify(req.body));
+  let log = null;
 
+  try {
     const event = req.body;
 
+    /*
+    =============================
+    LOG WEBHOOK RECEIVED
+    =============================
+    */
+
+    log = await WebhookLog.create({
+      provider: "cashfree",
+      payload: event,
+      status: "RECEIVED",
+    });
+
     const orderId = event?.data?.order?.order_id;
-    const paymentStatus = event?.data?.payment?.payment_status;
     const transactionId = event?.data?.payment?.cf_payment_id;
+    const paymentMethod = event?.data?.payment?.payment_method;
 
     if (!orderId) return res.sendStatus(400);
 
@@ -95,17 +133,27 @@ export const cashfreeWebhook = async (req, res) => {
 
     if (!payment) return res.sendStatus(404);
 
-    if (payment.status === "PAID") return res.sendStatus(200);
+    // Idempotency protection
+    if (payment.status === "PAID") {
+      await WebhookLog.updateOne({ _id: log._id }, { status: "PROCESSED" });
+
+      return res.sendStatus(200);
+    }
 
     const booking = payment.booking;
 
-    if (!booking) return res.sendStatus(200);
+    const orderStatus = event?.data?.payment?.payment_status;
 
-    if (paymentStatus === "SUCCESS") {
-      console.log("💰 Payment Success:", orderId);
+    /*
+    =============================
+    PAYMENT SUCCESS
+    =============================
+    */
 
+    if (orderStatus === "SUCCESS") {
       payment.status = "PAID";
       payment.transactionId = transactionId;
+      payment.paymentMethod = paymentMethod;
 
       await payment.save();
 
@@ -121,12 +169,19 @@ export const cashfreeWebhook = async (req, res) => {
       await Booking.findByIdAndUpdate(booking._id, {
         status: "CONFIRMED",
       });
+
+      console.log("✅ Payment confirmed:", orderId);
     }
 
-    if (paymentStatus === "FAILED") {
-      console.log("❌ Payment Failed:", orderId);
+    /*
+    =============================
+    PAYMENT FAILED / EXPIRED
+    =============================
+    */
 
+    if (orderStatus === "FAILED" || orderStatus === "EXPIRED") {
       payment.status = "FAILED";
+
       await payment.save();
 
       await Session.findByIdAndUpdate(booking.session, {
@@ -136,11 +191,146 @@ export const cashfreeWebhook = async (req, res) => {
       });
 
       await Booking.findByIdAndDelete(booking._id);
+
+      console.log("❌ Payment failed:", orderId);
     }
 
-    res.sendStatus(200);
+    /*
+    =============================
+    MARK WEBHOOK AS PROCESSED
+    =============================
+    */
+
+    if (log) {
+      await WebhookLog.updateOne({ _id: log._id }, { status: "PROCESSED" });
+    }
+
+    return res.sendStatus(200);
   } catch (error) {
     console.error("❌ Webhook Error:", error.message);
-    res.sendStatus(500);
+
+    if (log) {
+      await WebhookLog.updateOne(
+        { _id: log._id },
+        {
+          status: "FAILED",
+          errorMessage: error.message,
+        },
+      );
+    }
+
+    return res.sendStatus(500);
   }
 };
+
+// with cashree webhook secret
+// export const cashfreeWebhook = async (req, res) => {
+//   try {
+//     const signature = req.headers["x-webhook-signature"];
+
+//     if (!signature) return res.sendStatus(401);
+
+//     const payload = JSON.stringify(req.body);
+
+//     /*
+//     ==============================
+//     VERIFY WEBHOOK SIGNATURE
+//     ==============================
+//     */
+
+//     const expectedSignature = crypto
+//       .createHmac("sha256", process.env.CASHFREE_WEBHOOK_SECRET)
+//       .update(payload)
+//       .digest("base64");
+
+//     if (signature !== expectedSignature) {
+//       console.log("❌ Webhook signature mismatch");
+//       return res.sendStatus(401);
+//     }
+
+//     const event = req.body;
+
+//     const orderId = event?.data?.order?.order_id;
+//     const transactionId = event?.data?.payment?.cf_payment_id;
+
+//     if (!orderId) return res.sendStatus(400);
+
+//     /*
+//     ==============================
+//     FETCH PAYMENT RECORD
+//     ==============================
+//     */
+
+//     const payment = await Payment.findOne({ orderId }).populate("booking");
+
+//     if (!payment) return res.sendStatus(404);
+
+//     /*
+//     ==============================
+//     IDEMPOTENCY CHECK
+//     ==============================
+//     */
+
+//     if (payment.status === "PAID") return res.sendStatus(200);
+
+//     const booking = payment.booking;
+
+//     const orderStatus = event?.data?.payment?.payment_status;
+
+//     /*
+//     ==============================
+//     PAYMENT SUCCESS
+//     ==============================
+//     */
+
+//     if (orderStatus === "SUCCESS") {
+//       payment.status = "PAID";
+//       payment.transactionId = transactionId;
+//       payment.paymentMethod = event?.data?.payment?.payment_method;
+
+//       await payment.save();
+
+//       await Session.findByIdAndUpdate(booking.session, {
+//         $pull: {
+//           lockedSeats: { seatNumber: booking.seatNumber },
+//         },
+//         $addToSet: {
+//           bookedSeats: booking.seatNumber,
+//         },
+//       });
+
+//       await Booking.findByIdAndUpdate(booking._id, {
+//         status: "CONFIRMED",
+//       });
+
+//       console.log("✅ Payment confirmed:", orderId);
+//     }
+
+//     /*
+//     ==============================
+//     PAYMENT FAILED / EXPIRED
+//     ==============================
+//     */
+
+//     if (orderStatus === "FAILED" || orderStatus === "EXPIRED") {
+//       payment.status = "FAILED";
+
+//       await payment.save();
+
+//       await Session.findByIdAndUpdate(booking.session, {
+//         $pull: {
+//           lockedSeats: { seatNumber: booking.seatNumber },
+//         },
+//       });
+
+//       await Booking.findByIdAndDelete(booking._id);
+
+//       console.log("❌ Payment failed:", orderId);
+//     }
+
+//     return res.sendStatus(200);
+//   } catch (error) {
+//     console.error("❌ Webhook Error:", error.message);
+//     return res.sendStatus(500);
+//   }
+// };

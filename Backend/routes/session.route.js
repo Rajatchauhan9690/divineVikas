@@ -14,10 +14,10 @@ SESSION ADMIN ROUTES
 ================================
 */
 
-router.post("/create", createSession);
-router.delete("/delete/:id", deleteSession);
+router.post("/create-session", createSession);
+router.delete("/delete-session/:id", deleteSession);
 
-router.get("/get", getSessions);
-router.get("/get-single/:id", getSingleSession);
+router.get("/get-all-session", getSessions);
+router.get("/get-single-session/:id", getSingleSession);
 
 export default router;

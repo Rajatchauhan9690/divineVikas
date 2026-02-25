@@ -1,20 +1,235 @@
+// import { useNavigate } from "react-router-dom";
+// import { useEffect, useState, useCallback } from "react";
+// import { toast } from "react-toastify";
+
+// import SeatGrid from "../components/booking/SeatGrid";
+// import { getSessionsApi, lockSeatApi } from "../api/api";
+
+// import { getDateLimits, getTodayDate } from "../utils/dateUtils";
+// import { parseSessionTime } from "../utils/timeUtils";
+
+// const BookingPage = () => {
+//   const navigate = useNavigate();
+
+//   const { minDate, maxDate } = getDateLimits();
+
+//   const [sessions, setSessions] = useState([]);
+//   const [loading, setLoading] = useState(false);
+//   const [bookingLoading, setBookingLoading] = useState(false);
+
+//   const [selectedDate, setSelectedDate] = useState(getTodayDate());
+//   const [selectedSession, setSelectedSession] = useState(null);
+//   const [selectedSeat, setSelectedSeat] = useState(null);
+
+//   /*
+//   ==============================
+//   Load Sessions
+//   ==============================
+//   */
+//   const loadSessions = useCallback(async () => {
+//     try {
+//       setLoading(true);
+
+//       const response = await getSessionsApi();
+
+//       const filtered = response
+//         .filter(
+//           (s) => new Date(s.date).toISOString().split("T")[0] === selectedDate,
+//         )
+//         .sort((a, b) => parseSessionTime(a.time) - parseSessionTime(b.time));
+
+//       setSessions(filtered);
+//     } catch (error) {
+//       console.error(error);
+//       toast.error("Failed to load sessions");
+//     } finally {
+//       setLoading(false);
+//     }
+//   }, [selectedDate]);
+
+//   /*
+//   ==============================
+//   Load Sessions On Date Change
+//   ==============================
+//   */
+//   useEffect(() => {
+//     loadSessions();
+//   }, [loadSessions]);
+
+//   /*
+//   ==============================
+//   Default Session
+//   ==============================
+//   */
+//   useEffect(() => {
+//     if (sessions.length > 0) {
+//       setSelectedSession(sessions[0]);
+//     } else {
+//       setSelectedSession(null);
+//     }
+//   }, [sessions]);
+
+//   /*
+//   ==============================
+//   Seat Select
+//   ==============================
+//   */
+//   const handleSeatSelect = (seatNumber) => {
+//     if (!selectedSession) return;
+
+//     setSelectedSeat(seatNumber);
+//   };
+
+//   /*
+//   ==============================
+//   Confirm Booking
+//   ==============================
+//   */
+//   const handleConfirm = async () => {
+//     try {
+//       if (bookingLoading) return;
+
+//       if (!selectedSession) {
+//         toast.error("Select session");
+//         return;
+//       }
+
+//       if (!selectedSeat) {
+//         toast.error("Select seat");
+//         return;
+//       }
+
+//       setBookingLoading(true);
+
+//       const res = await lockSeatApi({
+//         sessionId: selectedSession._id,
+//         seatNumber: selectedSeat,
+//         userName: "Guest",
+//       });
+
+//       console.log("Lock response:", res);
+
+//       if (!res.success) {
+//         toast.error(res.message || "Seat already locked");
+//         return;
+//       }
+
+//       // ✅ bookingId MUST come from backend
+//       const bookingId = res.bookingId;
+
+//       if (!bookingId) {
+//         toast.error("Booking ID missing");
+//         console.log(res);
+//         return;
+//       }
+
+//       // toast.success("Seat locked successfully");
+
+//       navigate("/checkout", {
+//         state: {
+//           bookingId,
+//           seatNumber: selectedSeat,
+//           sessionId: selectedSession._id,
+//           amount: 149,
+//         },
+//       });
+//     } catch (error) {
+//       console.error(error);
+//       toast.error("Booking failed");
+//     } finally {
+//       setBookingLoading(false);
+//     }
+//   };
+
+//   return (
+//     <div className="w-full max-w-6xl mx-auto p-4">
+//       {/* Date Selection */}
+//       <div className="mb-4">
+//         <h3 className="text-lg font-bold mb-2">Select Date</h3>
+
+//         <input
+//           type="date"
+//           value={selectedDate}
+//           min={minDate}
+//           max={maxDate}
+//           onChange={(e) => setSelectedDate(e.target.value)}
+//           className="border p-2 rounded"
+//         />
+//       </div>
+
+//       {/* Sessions */}
+//       <div className="mb-4">
+//         <h3 className="text-lg font-bold mb-2">Sessions</h3>
+
+//         {loading ? (
+//           <p>Loading sessions...</p>
+//         ) : sessions.length === 0 ? (
+//           <p>No sessions available</p>
+//         ) : (
+//           <div className="flex gap-2 flex-wrap">
+//             {sessions.map((session) => (
+//               <button
+//                 key={session._id}
+//                 onClick={() => setSelectedSession(session)}
+//                 className={`px-4 py-2 rounded border ${
+//                   selectedSession?._id === session._id
+//                     ? "bg-green-500 text-white"
+//                     : "bg-white"
+//                 }`}
+//               >
+//                 {session.time}
+//               </button>
+//             ))}
+//           </div>
+//         )}
+//       </div>
+
+//       {/* Seat Grid */}
+//       <div className="mb-6">
+//         {selectedSession ? (
+//           <>
+//             <h3 className="text-lg font-bold mb-2">Select Seat</h3>
+
+//             <SeatGrid
+//               totalSeats={selectedSession.totalSeats}
+//               bookedSeats={selectedSession.bookedSeats}
+//               lockedSeats={selectedSession.lockedSeats}
+//               selectedSeat={selectedSeat}
+//               onSeatSelect={handleSeatSelect}
+//             />
+//           </>
+//         ) : (
+//           <p>No session selected</p>
+//         )}
+//       </div>
+
+//       {/* Confirm Button */}
+//       <div className="flex justify-center">
+//         <button
+//           onClick={handleConfirm}
+//           disabled={bookingLoading}
+//           className={`px-6 py-3 rounded text-white ${
+//             bookingLoading ? "bg-gray-400" : "bg-green-600 hover:bg-green-700"
+//           }`}
+//         >
+//           {bookingLoading ? "Booking..." : "Confirm Booking"}
+//         </button>
+//       </div>
+//     </div>
+//   );
+// };
+
+// export default BookingPage;
+
 import { useNavigate } from "react-router-dom";
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { toast } from "react-toastify";
 
 import SeatGrid from "../components/booking/SeatGrid";
-
-import { getSessionsApi, bookSeatApi, lockSeatApi } from "../api/api";
+import { getSessionsApi, lockSeatApi } from "../api/api";
 
 import { getDateLimits, getTodayDate } from "../utils/dateUtils";
-import {
-  setSeatCache,
-  getSeatCache,
-  clearSeatCache,
-} from "../utils/cacheUtils";
-x;
 import { parseSessionTime } from "../utils/timeUtils";
-import useAutoDateSync from "../hooks/useAutoDateSync";
 
 const BookingPage = () => {
   const navigate = useNavigate();
@@ -29,173 +244,64 @@ const BookingPage = () => {
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
-  const apiLockRef = useRef(false);
-  const confirmLockRef = useRef(false);
-  const seatClickLockRef = useRef(false);
-  const bookingClickRef = useRef(false);
-
-  useAutoDateSync(setSelectedDate);
-
-  /* ===============================
-     Load Sessions
-  ================================= */
-
-  const loadSessions = useCallback(async (dateValue, showLoading = true) => {
+  const loadSessions = useCallback(async () => {
     try {
-      if (apiLockRef.current) return;
+      setLoading(true);
 
-      apiLockRef.current = true;
-
-      if (showLoading) setLoading(true);
-
-      const CACHE_VALIDITY = 30000;
-
-      const cache = getSeatCache();
-
-      if (
-        cache &&
-        cache.date === dateValue &&
-        Date.now() - cache.timestamp < CACHE_VALIDITY
-      ) {
-        setSessions(cache.sessions);
-        return;
-      }
-
-      const response = await adminGetSessionsApi();
+      const response = await getSessionsApi();
 
       const filtered = response
-        .filter((s) => {
-          if (!s.date) return false;
-          return new Date(s.date).toISOString().split("T")[0] === dateValue;
-        })
-        .sort((a, b) => {
-          return parseSessionTime(a.time) - parseSessionTime(b.time);
-        });
+        .filter(
+          (s) => new Date(s.date).toISOString().split("T")[0] === selectedDate,
+        )
+        .sort((a, b) => parseSessionTime(a.time) - parseSessionTime(b.time));
 
       setSessions(filtered);
-
-      setSeatCache({
-        date: dateValue,
-        sessions: filtered,
-        timestamp: Date.now(),
-      });
     } catch {
-      toast.error("Failed to load slots");
+      toast.error("Failed to load sessions");
     } finally {
-      apiLockRef.current = false;
-      if (showLoading) setLoading(false);
+      setLoading(false);
     }
-  }, []);
-
-  /* ===============================
-     Default Slot Selection
-  ================================= */
-  /* ===============================
-   Default Session Selection
-================================ */
+  }, [selectedDate]);
 
   useEffect(() => {
-    if (!sessions.length) {
+    loadSessions();
+  }, [loadSessions]);
+
+  useEffect(() => {
+    if (sessions.length > 0) {
+      setSelectedSession(sessions[0]);
+    } else {
       setSelectedSession(null);
-      return;
     }
-
-    setSelectedSession((prev) => {
-      if (!prev) return sessions[0];
-
-      return sessions.find((s) => s._id === prev._id) || sessions[0];
-    });
   }, [sessions]);
 
-  /* ===============================
-   Load Sessions When Date Changes
-================================ */
-
-  useEffect(() => {
-    loadSessions(selectedDate);
-  }, [selectedDate, loadSessions]);
-
-  /* ===============================
-   Auto Refresh Session Data
-================================ */
-
-  useEffect(() => {
-    if (!selectedSession) return;
-
-    const interval = setInterval(() => {
-      loadSessions(selectedDate, false);
-    }, 30000);
-
-    return () => clearInterval(interval);
-  }, [selectedSession, selectedDate, loadSessions]);
-
-  /* ===============================
-     Socket Listener
-  ================================= */
-
-  useEffect(() => {
-    if (!selectedSession) return;
-
-    const socket = window.socket;
-    if (!socket) return;
-
-    const seatUpdateHandler = (sessionId) => {
-      if (sessionId !== selectedSession._id) return;
-
-      clearSeatCache();
-      loadSessions(selectedDate, false);
-    };
-
-    socket.emit("join-session", selectedSession._id);
-
-    socket.off("seat-updated");
-    socket.on("seat-updated", seatUpdateHandler);
-
-    return () => {
-      socket.emit("leave-session", selectedSession._id);
-      socket.off("seat-updated", seatUpdateHandler);
-    };
-  }, [selectedSession, selectedDate, loadSessions]);
-
-  /* ===============================
-     Seat Selection
-  ================================= */
-
-  const handleSeatSelect = (seatNumber) => {
-    if (!selectedSession) return;
-    setSelectedSeat(seatNumber); // Only UI selection
-  };
-
-  /* ===============================
-     Confirm Booking
-  ================================= */
   const handleConfirm = async () => {
     try {
-      if (bookingLoading) return;
-
       if (!selectedSession || !selectedSeat) {
-        toast.error("Select slot and seat");
+        toast.error("Select session and seat");
         return;
       }
 
       setBookingLoading(true);
 
-      // Lock seat first
-      const lockRes = await lockSeatApi({
+      const res = await lockSeatApi({
         sessionId: selectedSession._id,
         seatNumber: selectedSeat,
+        userName: "Guest",
       });
 
-      if (!lockRes?.success) {
-        toast.error(lockRes?.message || "Seat already taken");
+      if (!res.success) {
+        toast.error(res.message || "Seat already locked");
         return;
       }
 
-      // Navigate checkout ONLY
       navigate("/checkout", {
         state: {
+          bookingId: res.bookingId,
           sessionId: selectedSession._id,
           seatNumber: selectedSeat,
+          amount: 149,
         },
       });
     } catch {
@@ -206,95 +312,62 @@ const BookingPage = () => {
   };
 
   return (
-    <div className="w-full max-w-7xl mx-auto py-4 md:py-10 px-3 md:px-6 overflow-x-hidden">
-      <div className="flex flex-col md:flex-row gap-6 h-full w-full">
-        <div
-          className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        rounded-xl p-4 h-[23vh] md:h-auto max-h-[calc(100vh-90px)]
-        overflow-y-auto overflow-x-hidden hide-scrollbar"
-        >
-          <h3 className="text-lg font-bold text-center mb-3">Select Date</h3>
+    <div className="w-full max-w-6xl mx-auto p-4">
+      <div className="mb-4">
+        <h3 className="font-bold mb-2">Select Date</h3>
 
-          <input
-            type="date"
-            value={selectedDate}
-            min={minDate}
-            max={maxDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
-            className="w-full border rounded-lg p-2 mb-4"
-          />
+        <input
+          type="date"
+          value={selectedDate}
+          min={minDate}
+          max={maxDate}
+          onChange={(e) => setSelectedDate(e.target.value)}
+          className="border p-2 rounded"
+        />
+      </div>
 
-          <h3 className="text-lg font-bold text-center mb-3">
-            Meditation Slots
-          </h3>
+      <div className="mb-4">
+        <h3 className="font-bold mb-2">Sessions</h3>
 
-          <div className="flex md:flex-col gap-2 overflow-x-auto hide-scrollbar pb-2">
-            {loading ? (
-              <div className="w-full h-[50px] md:h-[100px] flex items-center justify-center">
-                <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
-              </div>
-            ) : sessions.length === 0 ? (
-              <div className="text-center text-gray-400 text-sm p-4 w-full">
-                {`There are no slots for ${selectedDate}`}
-              </div>
-            ) : (
-              sessions.map((session) => (
-                <button
-                  key={session._id}
-                  onClick={() => setSelectedSession(session)}
-                  className={`border rounded-lg p-2 transition min-w-[90px] md:w-full text-md ${
-                    selectedSession?._id === session._id
-                      ? "bg-green-500 text-white"
-                      : "bg-white hover:bg-green-50"
-                  }`}
-                >
-                  {session.time}
-                </button>
-              ))
-            )}
+        {loading ? (
+          <p>Loading sessions...</p>
+        ) : (
+          <div className="flex gap-2 flex-wrap">
+            {sessions.map((session) => (
+              <button
+                key={session._id}
+                onClick={() => setSelectedSession(session)}
+                className={`px-4 py-2 border rounded ${
+                  selectedSession?._id === session._id
+                    ? "bg-green-500 text-white"
+                    : "bg-white"
+                }`}
+              >
+                {session.time}
+              </button>
+            ))}
           </div>
-        </div>
+        )}
+      </div>
 
-        <div
-          className="flex-1 w-full bg-white rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        p-4 max-h-[calc(100vh-90px)]
-        overflow-y-auto overflow-x-hidden hide-scrollbar"
+      {selectedSession && (
+        <SeatGrid
+          totalSeats={selectedSession.totalSeats}
+          bookedSeats={selectedSession.bookedSeats}
+          lockedSeats={selectedSession.lockedSeats}
+          selectedSeat={selectedSeat}
+          onSeatSelect={setSelectedSeat}
+        />
+      )}
+
+      <div className="flex justify-center mt-6">
+        <button
+          onClick={handleConfirm}
+          disabled={bookingLoading}
+          className="bg-green-600 text-white px-6 py-3 rounded"
         >
-          {!selectedSession ? (
-            <div className="h-[500px] flex items-center justify-center text-gray-400 text-sm">
-              No available slots
-            </div>
-          ) : (
-            <>
-              <h2 className="text-xl md:text-2xl font-bold text-center mb-6">
-                Select Your Seat
-              </h2>
-
-              <SeatGrid
-                totalSeats={selectedSession.totalSeats}
-                bookedSeats={selectedSession.bookedSeats}
-                lockedSeats={selectedSession.lockedSeats}
-                selectedSeat={selectedSeat}
-                onSeatSelect={handleSeatSelect}
-              />
-
-              <div className="mt-6 flex justify-center">
-                <button
-                  onClick={handleConfirm}
-                  disabled={bookingLoading}
-                  className={`bg-green-600 text-white px-6 py-2 rounded-lg w-full md:w-auto text-sm flex items-center justify-center gap-2 transition ${
-                    bookingLoading ? "opacity-50 " : "opacity-100"
-                  }`}
-                >
-                  {bookingLoading && (
-                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  )}
-                  {bookingLoading ? "Booking..." : "Confirm Booking"}
-                </button>
-              </div>
-            </>
-          )}
-        </div>
+          {bookingLoading ? "Booking..." : "Confirm Booking"}
+        </button>
       </div>
     </div>
   );
