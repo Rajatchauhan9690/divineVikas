@@ -140,9 +140,20 @@ export const cashfreeWebhook = async (req, res) => {
     console.log("Webhook payload:", JSON.stringify(event));
 
     /*
-    =============================
+    ====================================
+    IGNORE TEST PING EVENTS (IMPORTANT)
+    ====================================
+    */
+
+    if (!event?.data?.order && !event?.data?.payment) {
+      console.log("⚠ Ignoring webhook test ping event");
+      return res.status(200).send("OK");
+    }
+
+    /*
+    ====================================
     LOG WEBHOOK RECEIVED
-    =============================
+    ====================================
     */
 
     log = await WebhookLog.create({
@@ -153,7 +164,15 @@ export const cashfreeWebhook = async (req, res) => {
 
     console.log("Webhook log created:", log?._id);
 
-    const orderId = event?.data?.order?.order_id;
+    /*
+    ====================================
+    EXTRACT DATA
+    ====================================
+    */
+
+    const orderId =
+      event?.data?.order?.order_id || event?.data?.payment?.order_id;
+
     const transactionId = event?.data?.payment?.cf_payment_id;
     const paymentMethod = event?.data?.payment?.payment_method;
 
@@ -174,13 +193,18 @@ export const cashfreeWebhook = async (req, res) => {
 
     if (!payment) return res.sendStatus(404);
 
-    // Idempotency protection
+    /*
+    ====================================
+    IDEMPOTENCY CHECK
+    ====================================
+    */
+
     if (payment.status === "PAID") {
       console.log("⚠ Payment already processed");
 
       await WebhookLog.updateOne({ _id: log._id }, { status: "PROCESSED" });
 
-      return res.sendStatus(200);
+      return res.status(200).send("OK");
     }
 
     const booking = payment.booking;
@@ -191,9 +215,9 @@ export const cashfreeWebhook = async (req, res) => {
     console.log("Payment gateway status:", orderStatus);
 
     /*
-    =============================
+    ====================================
     PAYMENT SUCCESS
-    =============================
+    ====================================
     */
 
     if (["SUCCESS", "PAID", "COMPLETED"].includes(orderStatus)) {
@@ -226,13 +250,13 @@ export const cashfreeWebhook = async (req, res) => {
     }
 
     /*
-    =============================
-    PAYMENT FAILED / EXPIRED
-    =============================
+    ====================================
+    PAYMENT FAILURE
+    ====================================
     */
 
-    if (orderStatus === "FAILED" || orderStatus === "EXPIRED") {
-      console.log("❌ Payment FAILED or EXPIRED block executed");
+    if (["FAILED", "EXPIRED"].includes(orderStatus)) {
+      console.log("❌ Payment FAILED or EXPIRED");
 
       payment.status = "FAILED";
 
@@ -252,9 +276,9 @@ export const cashfreeWebhook = async (req, res) => {
     }
 
     /*
-    =============================
+    ====================================
     MARK WEBHOOK AS PROCESSED
-    =============================
+    ====================================
     */
 
     if (log) {
@@ -262,9 +286,8 @@ export const cashfreeWebhook = async (req, res) => {
 
       console.log("Webhook log marked PROCESSED");
     }
-    return res.status(200).json({
-      received: true,
-    });
+
+    return res.status(200).send("OK");
   } catch (error) {
     console.error("🔥 Webhook Error:", error.message);
 
