@@ -3,12 +3,6 @@ import Booking from "../models/booking.model.js";
 import { getIO } from "../socket/socket.js";
 import { cleanupExpiredLocks, isLockExpired } from "../utils/lock.util.js";
 
-/*
-==================================================
-LOCK SEAT + CREATE BOOKING (PRIMARY FLOW)
-==================================================
-*/
-
 export const lockSeat = async (req, res) => {
   try {
     console.log("🔍 Lock seat API called");
@@ -106,12 +100,6 @@ export const lockSeat = async (req, res) => {
   }
 };
 
-/*
-==================================================
-CANCEL BOOKING
-==================================================
-*/
-
 export const cancelBooking = async (req, res) => {
   try {
     console.log("🔍 Cancel booking API called");
@@ -189,12 +177,6 @@ export const cancelBooking = async (req, res) => {
     });
   }
 };
-
-/*
-==================================================
-GET BOOKINGS
-==================================================
-*/
 
 export const getAllBookings = async (req, res) => {
   try {

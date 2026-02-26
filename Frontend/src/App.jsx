@@ -22,6 +22,7 @@ import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailed from "./pages/PaymentFailed";
+import PaymentPending from "./pages/PaymentPending";
 
 export default function App() {
   return (
@@ -55,6 +56,7 @@ export default function App() {
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/payment-failed" element={<PaymentFailed />} />
+          <Route path="/payment-pending" element={<PaymentPending />} />
         </Routes>
       </BrowserRouter>
     </>

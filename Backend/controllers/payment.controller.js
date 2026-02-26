@@ -2,12 +2,7 @@ import axios from "axios";
 import Payment from "../models/payment.model.js";
 import Booking from "../models/booking.model.js";
 import Session from "../models/session.model.js";
-import WebhookLog from "../models/webhookLog.model.js";
-/*
-=====================================
-CREATE PAYMENT ORDER
-=====================================
-*/
+
 export const createPayment = async (req, res) => {
   try {
     console.log("🔍 Create payment API called");
@@ -92,13 +87,10 @@ export const createPayment = async (req, res) => {
 export const verifyPayment = async (req, res) => {
   try {
     console.log("🔍 Verify payment API called");
-    console.log("Request body:", req.body);
 
     const { orderId } = req.body;
 
-    const payment = await Payment.findOne({ orderId });
-
-    console.log("Payment record found:", !!payment);
+    const payment = await Payment.findOne({ orderId }).populate("booking");
 
     if (!payment) {
       return res.status(404).json({
@@ -107,129 +99,56 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    console.log("Current payment status:", payment.status);
-
-    res.json({
-      success: true,
-      status: payment.status,
-      transactionId: payment.transactionId,
-    });
-  } catch (error) {
-    console.error("🔥 Verify Payment Error:", error);
-
-    res.status(500).json({
-      success: false,
-      message: "Verification failed",
-    });
-  }
-};
-/*
-=====================================
-WEBHOOK HANDLER (PRODUCTION STYLE)
-=====================================
-*/
-
-export const cashfreeWebhook = async (req, res) => {
-  let log = null;
-
-  try {
-    console.log("🔥 Cashfree webhook triggered");
-
-    const event = req.body;
-
-    console.log("Webhook payload:", JSON.stringify(event));
-
     /*
-    ====================================
-    IGNORE TEST PING EVENTS (IMPORTANT)
-    ====================================
-    */
-
-    if (!event?.data?.order && !event?.data?.payment) {
-      console.log("⚠ Ignoring webhook test ping event");
-      return res.status(200).send("OK");
-    }
-
-    /*
-    ====================================
-    LOG WEBHOOK RECEIVED
-    ====================================
-    */
-
-    log = await WebhookLog.create({
-      provider: "cashfree",
-      payload: event,
-      status: "RECEIVED",
-    });
-
-    console.log("Webhook log created:", log?._id);
-
-    /*
-    ====================================
-    EXTRACT DATA
-    ====================================
-    */
-
-    const orderId =
-      event?.data?.order?.order_id || event?.data?.payment?.order_id;
-
-    const transactionId = event?.data?.payment?.cf_payment_id;
-    const paymentMethod = event?.data?.payment?.payment_method;
-
-    console.log("Parsed webhook data:", {
-      orderId,
-      transactionId,
-      paymentMethod,
-    });
-
-    if (!orderId) {
-      console.log("❌ orderId missing in webhook");
-      return res.sendStatus(400);
-    }
-
-    const payment = await Payment.findOne({ orderId }).populate("booking");
-
-    console.log("Payment record found:", !!payment);
-
-    if (!payment) return res.sendStatus(404);
-
-    /*
-    ====================================
-    IDEMPOTENCY CHECK
-    ====================================
+    =============================
+    IF PAYMENT ALREADY PROCESSED
+    =============================
     */
 
     if (payment.status === "PAID") {
-      console.log("⚠ Payment already processed");
-
-      await WebhookLog.updateOne({ _id: log._id }, { status: "PROCESSED" });
-
-      return res.status(200).send("OK");
+      return res.json({
+        success: true,
+        status: payment.status,
+        transactionId: payment.transactionId,
+      });
     }
+
+    /*
+    =============================
+    FETCH PAYMENT STATUS FROM CASHFREE
+    =============================
+    */
+
+    const gatewayResponse = await axios.get(
+      `https://sandbox.cashfree.com/pg/orders/${orderId}`,
+      {
+        headers: {
+          "x-client-id": process.env.CASHFREE_CLIENT_ID,
+          "x-client-secret": process.env.CASHFREE_CLIENT_SECRET,
+          "x-api-version": "2023-08-01",
+        },
+      },
+    );
+
+    const orderStatus = gatewayResponse?.data?.order_status;
 
     const booking = payment.booking;
 
-    const orderStatus =
-      event?.data?.order?.order_status || event?.data?.payment?.payment_status;
-
-    console.log("Payment gateway status:", orderStatus);
-
     /*
-    ====================================
-    PAYMENT SUCCESS
-    ====================================
+    =============================
+    PAYMENT SUCCESS → CONFIRM BOOKING
+    =============================
     */
 
-    if (["SUCCESS", "PAID", "COMPLETED"].includes(orderStatus)) {
-      console.log("✅ Payment SUCCESS block executed");
-
+    if (["PAID", "SUCCESS", "COMPLETED"].includes(orderStatus)) {
       payment.status = "PAID";
-      payment.transactionId = transactionId;
-      payment.paymentMethod = paymentMethod;
+      payment.transactionId = gatewayResponse?.data?.cf_payment_id || null;
 
       await payment.save();
 
-      console.log("Payment record updated to PAID");
+      /*
+      Remove locked seat and confirm booking
+      */
 
       await Session.findByIdAndUpdate(booking.session, {
         $pull: {
@@ -240,24 +159,24 @@ export const cashfreeWebhook = async (req, res) => {
         },
       });
 
-      console.log("Session seat lock removed + booked seat added");
-
       await Booking.findByIdAndUpdate(booking._id, {
         status: "CONFIRMED",
       });
 
-      console.log("Booking marked CONFIRMED:", booking._id);
+      return res.json({
+        success: true,
+        status: "PAID",
+        message: "Booking confirmed",
+      });
     }
 
     /*
-    ====================================
-    PAYMENT FAILURE
-    ====================================
+    =============================
+    PAYMENT FAILED / EXPIRED
+    =============================
     */
 
     if (["FAILED", "EXPIRED"].includes(orderStatus)) {
-      console.log("❌ Payment FAILED or EXPIRED");
-
       payment.status = "FAILED";
 
       await payment.save();
@@ -268,151 +187,25 @@ export const cashfreeWebhook = async (req, res) => {
         },
       });
 
-      console.log("Session lock removed");
-
       await Booking.findByIdAndDelete(booking._id);
 
-      console.log("Booking deleted:", booking._id);
+      return res.json({
+        success: true,
+        status: "FAILED",
+        message: "Booking cancelled",
+      });
     }
 
-    /*
-    ====================================
-    MARK WEBHOOK AS PROCESSED
-    ====================================
-    */
-
-    if (log) {
-      await WebhookLog.updateOne({ _id: log._id }, { status: "PROCESSED" });
-
-      console.log("Webhook log marked PROCESSED");
-    }
-
-    return res.status(200).send("OK");
+    return res.json({
+      success: true,
+      status: orderStatus,
+    });
   } catch (error) {
-    console.error("🔥 Webhook Error:", error.message);
+    console.error("🔥 Verify Payment Error:", error.message);
 
-    if (log) {
-      await WebhookLog.updateOne(
-        { _id: log._id },
-        {
-          status: "FAILED",
-          errorMessage: error.message,
-        },
-      );
-    }
-
-    return res.sendStatus(500);
+    res.status(500).json({
+      success: false,
+      message: "Verification failed",
+    });
   }
 };
-
-// with cashree webhook secret
-// export const cashfreeWebhook = async (req, res) => {
-//   try {
-//     const signature = req.headers["x-webhook-signature"];
-
-//     if (!signature) return res.sendStatus(401);
-
-//     const payload = JSON.stringify(req.body);
-
-//     /*
-//     ==============================
-//     VERIFY WEBHOOK SIGNATURE
-//     ==============================
-//     */
-
-//     const expectedSignature = crypto
-//       .createHmac("sha256", process.env.CASHFREE_WEBHOOK_SECRET)
-//       .update(payload)
-//       .digest("base64");
-
-//     if (signature !== expectedSignature) {
-//       console.log("❌ Webhook signature mismatch");
-//       return res.sendStatus(401);
-//     }
-
-//     const event = req.body;
-
-//     const orderId = event?.data?.order?.order_id;
-//     const transactionId = event?.data?.payment?.cf_payment_id;
-
-//     if (!orderId) return res.sendStatus(400);
-
-//     /*
-//     ==============================
-//     FETCH PAYMENT RECORD
-//     ==============================
-//     */
-
-//     const payment = await Payment.findOne({ orderId }).populate("booking");
-
-//     if (!payment) return res.sendStatus(404);
-
-//     /*
-//     ==============================
-//     IDEMPOTENCY CHECK
-//     ==============================
-//     */
-
-//     if (payment.status === "PAID") return res.sendStatus(200);
-
-//     const booking = payment.booking;
-
-//     const orderStatus = event?.data?.payment?.payment_status;
-
-//     /*
-//     ==============================
-//     PAYMENT SUCCESS
-//     ==============================
-//     */
-
-//     if (orderStatus === "SUCCESS") {
-//       payment.status = "PAID";
-//       payment.transactionId = transactionId;
-//       payment.paymentMethod = event?.data?.payment?.payment_method;
-
-//       await payment.save();
-
-//       await Session.findByIdAndUpdate(booking.session, {
-//         $pull: {
-//           lockedSeats: { seatNumber: booking.seatNumber },
-//         },
-//         $addToSet: {
-//           bookedSeats: booking.seatNumber,
-//         },
-//       });
-
-//       await Booking.findByIdAndUpdate(booking._id, {
-//         status: "CONFIRMED",
-//       });
-
-//       console.log("✅ Payment confirmed:", orderId);
-//     }
-
-//     /*
-//     ==============================
-//     PAYMENT FAILED / EXPIRED
-//     ==============================
-//     */
-
-//     if (orderStatus === "FAILED" || orderStatus === "EXPIRED") {
-//       payment.status = "FAILED";
-
-//       await payment.save();
-
-//       await Session.findByIdAndUpdate(booking.session, {
-//         $pull: {
-//           lockedSeats: { seatNumber: booking.seatNumber },
-//         },
-//       });
-
-//       await Booking.findByIdAndDelete(booking._id);
-
-//       console.log("❌ Payment failed:", orderId);
-//     }
-
-//     return res.sendStatus(200);
-//   } catch (error) {
-//     console.error("❌ Webhook Error:", error.message);
-//     return res.sendStatus(500);
-//   }
-// };
