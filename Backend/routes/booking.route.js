@@ -7,12 +7,6 @@ import {
 
 const router = express.Router();
 
-/*
-================================
-BOOKING FLOW ROUTES
-================================
-*/
-
 // Cancel booking
 router.delete("/cancel-booking/:bookingId", cancelBooking);
 

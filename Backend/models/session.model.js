@@ -53,10 +53,8 @@ const sessionSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Index for finding sessions
 sessionSchema.index({ name: 1, date: 1, time: 1 });
 
-// Index for lock expiration cleanup (IMPORTANT)
 sessionSchema.index({ "lockedSeats.lockedAt": 1 });
 
 export default mongoose.model("Session", sessionSchema);

@@ -8,12 +8,6 @@ import {
 
 const router = express.Router();
 
-/*
-================================
-SESSION ADMIN ROUTES
-================================
-*/
-
 router.post("/create-session", createSession);
 router.delete("/delete-session/:id", deleteSession);
 

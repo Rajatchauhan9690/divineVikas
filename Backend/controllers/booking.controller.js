@@ -47,11 +47,7 @@ export const lockSeat = async (req, res) => {
       });
     }
 
-    /*
-    =============================
-    LOCK SEAT
-    =============================
-    */
+    //   LOCK SEAT
 
     console.log("Locking seat:", seatNumber);
 
@@ -66,11 +62,7 @@ export const lockSeat = async (req, res) => {
 
     console.log("Session updated with locked seat");
 
-    /*
-    =============================
-    CREATE BOOKING (PENDING)
-    =============================
-    */
+    //    CREATE BOOKING (PENDING)
 
     const booking = await Booking.create({
       session: sessionId,
@@ -133,11 +125,7 @@ export const cancelBooking = async (req, res) => {
       });
     }
 
-    /*
-    =============================
-    UNLOCK SEAT
-    =============================
-    */
+    //    UNLOCK SEAT
 
     console.log("Unlocking seat:", booking.seatNumber);
 

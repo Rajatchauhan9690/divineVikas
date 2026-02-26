@@ -28,7 +28,6 @@ const bookingSchema = new mongoose.Schema(
   { timestamps: true },
 );
 
-// Prevent duplicate seat booking
 bookingSchema.index({ session: 1, seatNumber: 1 }, { unique: true });
 
 export default mongoose.model("Booking", bookingSchema);

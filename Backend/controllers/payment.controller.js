@@ -99,11 +99,7 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    /*
-    =============================
-    IF PAYMENT ALREADY PROCESSED
-    =============================
-    */
+    // IF PAYMENT ALREADY PROCESSED
 
     if (payment.status === "PAID") {
       return res.json({
@@ -113,11 +109,7 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    /*
-    =============================
-    FETCH PAYMENT STATUS FROM CASHFREE
-    =============================
-    */
+    //  FETCH PAYMENT STATUS FROM CASHFREE
 
     const gatewayResponse = await axios.get(
       `https://sandbox.cashfree.com/pg/orders/${orderId}`,
@@ -134,11 +126,7 @@ export const verifyPayment = async (req, res) => {
 
     const booking = payment.booking;
 
-    /*
-    =============================
-    PAYMENT SUCCESS → CONFIRM BOOKING
-    =============================
-    */
+    //    PAYMENT SUCCESS → CONFIRM BOOKING
 
     if (["PAID", "SUCCESS", "COMPLETED"].includes(orderStatus)) {
       payment.status = "PAID";
@@ -146,9 +134,7 @@ export const verifyPayment = async (req, res) => {
 
       await payment.save();
 
-      /*
-      Remove locked seat and confirm booking
-      */
+      // Remove locked seat and confirm booking
 
       await Session.findByIdAndUpdate(booking.session, {
         $pull: {
@@ -170,11 +156,7 @@ export const verifyPayment = async (req, res) => {
       });
     }
 
-    /*
-    =============================
-    PAYMENT FAILED / EXPIRED
-    =============================
-    */
+    //   PAYMENT FAILED / EXPIRED
 
     if (["FAILED", "EXPIRED"].includes(orderStatus)) {
       payment.status = "FAILED";
