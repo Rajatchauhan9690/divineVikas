@@ -176,6 +176,7 @@ export const confirmBooking = async (req, res) => {
     if (!booking) throw new Error("Booking not found");
 
     booking.status = "CONFIRMED";
+    booking.expiresAt = null;
     await booking.save();
 
     console.log("Booking status updated to CONFIRMED");

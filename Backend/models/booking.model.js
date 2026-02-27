@@ -29,10 +29,7 @@ const bookingSchema = new mongoose.Schema(
       type: Number,
       required: true,
     },
-    // pricePerSeat: {
-    //   type: Number,
-    //   required: true,
-    // },
+
     status: {
       type: String,
       enum: ["PENDING", "CONFIRMED", "FAILED"],
@@ -41,6 +38,8 @@ const bookingSchema = new mongoose.Schema(
   },
   { timestamps: true },
 );
+
+bookingSchema.index({ expiresAt: 1 }, { expireAfterSeconds: 0 });
 
 bookingSchema.index({ session: 1, seatNumber: 1 }, { unique: true });
 
