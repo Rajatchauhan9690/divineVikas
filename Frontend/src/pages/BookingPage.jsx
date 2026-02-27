@@ -21,16 +21,12 @@ const BookingPage = () => {
   const [selectedSession, setSelectedSession] = useState(null);
   const [selectedSeat, setSelectedSeat] = useState(null);
 
-  /*
-  ==============================
-  Load Sessions
-  ==============================
-  */
   const loadSessions = useCallback(async () => {
     try {
       setLoading(true);
 
       const response = await getSessionsApi();
+      // console.log(response);
 
       const filtered = response
         .filter(
@@ -47,20 +43,10 @@ const BookingPage = () => {
     }
   }, [selectedDate]);
 
-  /*
-  ==============================
-  Load Sessions On Date Change
-  ==============================
-  */
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
 
-  /*
-  ==============================
-  Default Session
-  ==============================
-  */
   useEffect(() => {
     if (sessions.length > 0) {
       setSelectedSession(sessions[0]);
@@ -69,22 +55,12 @@ const BookingPage = () => {
     }
   }, [sessions]);
 
-  /*
-  ==============================
-  Seat Select
-  ==============================
-  */
   const handleSeatSelect = (seatNumber) => {
     if (!selectedSession) return;
 
     setSelectedSeat(seatNumber);
   };
 
-  /*
-  ==============================
-  Confirm Booking
-  ==============================
-  */
   const handleConfirm = async () => {
     try {
       if (bookingLoading) return;
@@ -101,10 +77,10 @@ const BookingPage = () => {
 
       setBookingLoading(true);
 
+      // ✅ Only lock seat here
       const res = await lockSeatApi({
         sessionId: selectedSession._id,
         seatNumber: selectedSeat,
-        userName: "Guest",
       });
 
       console.log("Lock response:", res);
@@ -114,23 +90,14 @@ const BookingPage = () => {
         return;
       }
 
-      // bookingId MUST come from backend
-      const bookingId = res.bookingId;
-
-      if (!bookingId) {
-        toast.error("Booking ID missing");
-        console.log(res);
-        return;
-      }
-
+      // ✅ Move to checkout page
       navigate("/checkout", {
         state: {
-          bookingId,
-          seatNumber: selectedSeat,
           sessionId: selectedSession._id,
+          seatNumber: selectedSeat,
           slotTime: selectedSession.time,
           organizerName: selectedSession.name,
-          amount: 149,
+          amount: selectedSession.pricePerSeat,
         },
       });
     } catch (error) {
@@ -205,6 +172,9 @@ const BookingPage = () => {
               <h2 className="text-xl md:text-2xl font-bold text-center mb-6">
                 Select Your Seat
               </h2>
+              <p className="text-center text-gray-600 mb-4">
+                Price per seat: ₹{selectedSession?.pricePerSeat}
+              </p>
 
               <SeatGrid
                 totalSeats={selectedSession.totalSeats}

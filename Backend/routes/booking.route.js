@@ -3,15 +3,17 @@ import {
   cancelBooking,
   lockSeat,
   getAllBookings,
+  unlockSeat,
+  createBooking,
+  confirmBooking,
 } from "../controllers/booking.controller.js";
 
 const router = express.Router();
-
-// Cancel booking
-router.delete("/cancel-booking/:bookingId", cancelBooking);
-
-// Seat lock
 router.post("/lock-seat", lockSeat);
-router.get("/get-all-booking", getAllBookings);
+router.post("/unlock-seat", unlockSeat);
+router.post("/create-booking", createBooking);
+router.post("/confirm-booking", confirmBooking);
+router.delete("/cancel-booking/:bookingId", cancelBooking);
+router.get("/get-all-bookings", getAllBookings);
 
 export default router;

@@ -44,7 +44,10 @@ const sessionSchema = new mongoose.Schema(
       type: [Number],
       default: [],
     },
-
+    pricePerSeat: {
+      type: Number,
+      required: true,
+    },
     lockedSeats: {
       type: [lockedSeatSchema],
       default: [],

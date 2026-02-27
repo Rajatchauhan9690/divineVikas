@@ -1,64 +1,44 @@
-import { useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
-import { cancelBookingApi } from "../api/api";
+import { useNavigate } from "react-router-dom";
 
 export default function PaymentFailed() {
   const navigate = useNavigate();
-  const location = useLocation();
-
-  const hasCancelled = useRef(false);
-
-  const bookingId =
-    new URLSearchParams(location.search).get("booking_id") ||
-    location.state?.bookingId;
-
-  useEffect(() => {
-    console.log("PaymentFailed Page Loaded");
-
-    if (!bookingId) {
-      console.log("❌ Booking ID not found");
-      return;
-    }
-
-    if (hasCancelled.current) {
-      console.log("⚠️ Booking already cancelled, skipping API call");
-      return;
-    }
-
-    const cancelBooking = async () => {
-      try {
-        hasCancelled.current = true;
-
-        console.log("🔄 Cancelling booking for:", bookingId);
-
-        const res = await cancelBookingApi({
-          bookingId,
-        });
-
-        console.log("✅ Cancel booking response:", res);
-      } catch (error) {
-        console.error("❌ Cancel booking API error:", error);
-      }
-    };
-
-    cancelBooking();
-  }, [bookingId]);
 
   return (
-    <div className="h-screen flex flex-col justify-center items-center">
-      <h2 className="text-2xl text-red-600 mb-4">Payment Failed ❌</h2>
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200 px-4">
+      <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-10 text-center">
+        {/* Top Accent Bar */}
+        <div className="h-2 w-16 bg-red-600 mx-auto rounded-full mb-6"></div>
 
-      <p className="mb-6 text-gray-600">Your seat has been released.</p>
+        {/* Heading */}
+        <h2 className="text-2xl font-semibold text-gray-800 mb-3">
+          Payment Unsuccessful
+        </h2>
 
-      <button
-        onClick={() => {
-          console.log("👉 User clicked Try Again");
-          navigate("/booking");
-        }}
-        className="bg-red-500 text-white px-6 py-2 rounded"
-      >
-        Try Again
-      </button>
+        {/* Message */}
+        <p className="text-gray-500 text-sm leading-relaxed mb-8">
+          We were unable to process your payment.
+          <br />
+          Your booking has been cancelled and the seat has been released. Please
+          try again to complete your reservation.
+        </p>
+
+        {/* Buttons */}
+        <div className="space-y-3">
+          <button
+            onClick={() => navigate("/booking")}
+            className="w-full bg-red-600 hover:bg-red-700 text-white py-3 rounded-xl font-medium transition duration-200 shadow-md"
+          >
+            Try Again
+          </button>
+
+          <button
+            onClick={() => navigate("/")}
+            className="w-full border border-gray-300 text-gray-700 py-3 rounded-xl font-medium hover:bg-gray-100 transition"
+          >
+            Go to Home
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

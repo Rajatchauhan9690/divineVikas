@@ -7,22 +7,36 @@ const bookingSchema = new mongoose.Schema(
       ref: "Session",
       required: true,
     },
+    customerName: {
+      type: String,
+      required: true,
+    },
 
+    customerEmail: {
+      type: String,
+      required: true,
+    },
+
+    customerPhone: {
+      type: String,
+      required: true,
+    },
     seatNumber: {
       type: Number,
       required: true,
     },
-
+    totalAmount: {
+      type: Number,
+      required: true,
+    },
+    // pricePerSeat: {
+    //   type: Number,
+    //   required: true,
+    // },
     status: {
       type: String,
       enum: ["PENDING", "CONFIRMED", "FAILED"],
       default: "PENDING",
-    },
-
-    userName: {
-      type: String,
-      required: true,
-      trim: true,
     },
   },
   { timestamps: true },

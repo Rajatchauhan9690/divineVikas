@@ -5,7 +5,6 @@ import {
   getSessionsApi,
   deleteSessionApi,
   getAllBookingsApi,
-  getSingleSessionApi,
 } from "../api/api";
 
 import { ToastContainer, toast } from "react-toastify";
@@ -35,6 +34,7 @@ const AdminPage = () => {
     name: "",
     date: getTodayDate(),
     totalSeats: "",
+    pricePerSeat: "",
   });
 
   const [timeValue, setTimeValue] = useState("");
@@ -61,6 +61,8 @@ const AdminPage = () => {
   const fetchSlots = useCallback(async () => {
     try {
       const data = await getSessionsApi();
+      console.log(data);
+
       setSlots(data || []);
     } catch {
       toast.error("Slot fetch failed");
@@ -134,6 +136,7 @@ const AdminPage = () => {
     if (!form.name.trim()) return false;
     if (!form.date) return false;
     if (!form.totalSeats || Number(form.totalSeats) <= 0) return false;
+    if (!form.pricePerSeat || Number(form.pricePerSeat) <= 0) return false;
     if (!timeValue.includes(":")) return false;
 
     const [hour, minute] = timeValue.split(":");
@@ -165,16 +168,18 @@ const AdminPage = () => {
     try {
       const fullTime = `${timeValue} ${period}`;
 
-      await createSessionApi({
+      const res = await createSessionApi({
         ...form,
         time: fullTime,
         timeValueParsed: parseSessionTime(fullTime),
         totalSeats: Number(form.totalSeats),
+        pricePerSeat: Number(form.pricePerSeat),
         bookedSeats: [],
         lockedSeats: [],
       });
 
       toast.success("Session created successfully");
+      console.log("session creation", res);
 
       await loadData();
 
@@ -182,6 +187,7 @@ const AdminPage = () => {
         name: "",
         date: getTodayDate(),
         totalSeats: "",
+        pricePerSeat: "",
       });
 
       setTimeValue("");
@@ -393,6 +399,14 @@ const AdminPage = () => {
                 placeholder="Total Seats"
                 className="border p-3 rounded-lg"
               />
+              <input
+                name="pricePerSeat"
+                value={form.pricePerSeat}
+                onChange={handleChange}
+                type="number"
+                placeholder="Price Per Seat (₹)"
+                className="border p-3 rounded-lg"
+              />
             </div>
 
             <button
@@ -507,7 +521,7 @@ const AdminPage = () => {
                   : "Bookings History (Latest 5 Bookings)"}
               </h2>
 
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-3 gap-6">
                 {filteredBookings.length > 0 ? (
                   filteredBookings.map((booking) => (
                     <div
@@ -628,7 +642,7 @@ const AdminPage = () => {
                   : "Session History (Latest 5 Sessions)"}
               </h2>
 
-              <div className="grid md:grid-cols-2 gap-6">
+              <div className="grid md:grid-cols-3 gap-6">
                 {filteredSlots.length > 0 ? (
                   filteredSlots.map((slot) => (
                     <div
@@ -654,6 +668,9 @@ const AdminPage = () => {
 
                       <p>
                         <strong>Total Seats:</strong> {slot.totalSeats}
+                      </p>
+                      <p>
+                        <strong>Price:</strong> ₹{slot.pricePerSeat || 0}
                       </p>
                     </div>
                   ))

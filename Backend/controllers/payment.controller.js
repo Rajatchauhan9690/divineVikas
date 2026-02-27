@@ -3,44 +3,56 @@ import Payment from "../models/payment.model.js";
 import Booking from "../models/booking.model.js";
 import Session from "../models/session.model.js";
 
+const validateBooking = async (bookingId) => {
+  if (!bookingId) throw new Error("BookingId is required");
+
+  const booking = await Booking.findById(bookingId);
+
+  if (!booking) throw new Error("Booking not found");
+
+  if (booking.status !== "PENDING") {
+    throw new Error("Booking expired or already processed");
+  }
+
+  return booking;
+};
+
 export const createPayment = async (req, res) => {
   try {
-    console.log("🔍 Create payment API called");
-    console.log("Request body:", req.body);
+    const { bookingId, customerName, customerEmail, customerPhone } = req.body;
 
-    const { sessionId, seatNumber, amount } = req.body;
+    const booking = await validateBooking(bookingId);
 
-    const booking = await Booking.findOne({
-      session: sessionId,
-      seatNumber,
+    // Check existing pending payment
+    const existingPayment = await Payment.findOne({
+      booking: booking._id,
       status: "PENDING",
     });
 
-    console.log("Booking lookup result:", !!booking);
-
-    if (!booking) {
-      console.log("❌ Booking not found for payment creation");
-      return res.status(404).json({ message: "Booking not found" });
+    if (existingPayment) {
+      return res.json({
+        orderId: existingPayment.orderId,
+        payment_session_id: existingPayment.paymentSessionId,
+      });
     }
 
     const orderId = "order_" + Date.now();
-    console.log("Generated orderId:", orderId);
 
-    const request = {
+    const orderRequest = {
       order_id: orderId,
-      order_amount: Number(amount),
+      order_amount: booking.totalAmount,
       order_currency: "INR",
       customer_details: {
-        customer_id: booking.userName || "guest_" + Date.now(),
-        customer_phone: "9999999999",
+        customer_id: "guest_" + Date.now(),
+        customer_name: customerName || "Guest",
+        customer_email: customerEmail || "guest@email.com",
+        customer_phone: customerPhone || "0000000000",
       },
     };
 
-    console.log("Cashfree order request payload:", request);
-
     const response = await axios.post(
       "https://sandbox.cashfree.com/pg/orders",
-      request,
+      orderRequest,
       {
         headers: {
           "x-client-id": process.env.CASHFREE_CLIENT_ID,
@@ -51,67 +63,59 @@ export const createPayment = async (req, res) => {
       },
     );
 
-    console.log("Cashfree order response received");
-
-    const paymentSessionId = response?.data?.payment_session_id?.trim();
-
-    console.log("Payment session ID:", paymentSessionId ? "Exists" : "Missing");
-
-    if (!paymentSessionId) throw new Error("Payment session creation failed");
+    const paymentSessionId = response.data.payment_session_id;
 
     await Payment.create({
       booking: booking._id,
       orderId,
-      amount,
+      amount: booking.totalAmount,
       currency: "INR",
       paymentSessionId,
       status: "PENDING",
     });
 
-    console.log("Payment record created in database");
-
-    res.json({
-      success: true,
+    return res.json({
       orderId,
       payment_session_id: paymentSessionId,
     });
   } catch (error) {
-    console.error("🔥 Create Payment Error:", error);
+    console.error("Create Payment Error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
-      message: "Payment order creation failed",
+      message: error.message || "Payment failed",
     });
   }
 };
+
 export const verifyPayment = async (req, res) => {
   try {
-    console.log("🔍 Verify payment API called");
-
     const { orderId } = req.body;
+
+    if (!orderId) {
+      return res.status(400).json({
+        message: "OrderId is required",
+      });
+    }
 
     const payment = await Payment.findOne({ orderId }).populate("booking");
 
     if (!payment) {
       return res.status(404).json({
-        success: false,
         message: "Payment not found",
       });
     }
 
-    // IF PAYMENT ALREADY PROCESSED
-
+    // Idempotency guard
     if (payment.status === "PAID") {
       return res.json({
         success: true,
-        status: payment.status,
-        transactionId: payment.transactionId,
+        message: "Payment already processed",
+        bookingId: payment.booking?._id,
       });
     }
 
-    //  FETCH PAYMENT STATUS FROM CASHFREE
-
-    const gatewayResponse = await axios.get(
+    const response = await axios.get(
       `https://sandbox.cashfree.com/pg/orders/${orderId}`,
       {
         headers: {
@@ -122,19 +126,13 @@ export const verifyPayment = async (req, res) => {
       },
     );
 
-    const orderStatus = gatewayResponse?.data?.order_status;
-
+    const orderStatus = response.data.order_status;
     const booking = payment.booking;
 
-    //    PAYMENT SUCCESS → CONFIRM BOOKING
-
-    if (["PAID", "SUCCESS", "COMPLETED"].includes(orderStatus)) {
+    // ✅ Payment success flow
+    if (orderStatus === "PAID") {
       payment.status = "PAID";
-      payment.transactionId = gatewayResponse?.data?.cf_payment_id || null;
-
       await payment.save();
-
-      // Remove locked seat and confirm booking
 
       await Session.findByIdAndUpdate(booking.session, {
         $pull: {
@@ -151,41 +149,34 @@ export const verifyPayment = async (req, res) => {
 
       return res.json({
         success: true,
-        status: "PAID",
         message: "Booking confirmed",
+        bookingId: booking._id,
       });
     }
 
-    //   PAYMENT FAILED / EXPIRED
+    // ✅ Handle all failure / pending / cancelled states
+    payment.status = orderStatus;
+    await payment.save();
 
-    if (["FAILED", "EXPIRED"].includes(orderStatus)) {
-      payment.status = "FAILED";
+    await Booking.findByIdAndUpdate(booking._id, {
+      status: "FAILED",
+    });
 
-      await payment.save();
-
-      await Session.findByIdAndUpdate(booking.session, {
-        $pull: {
-          lockedSeats: { seatNumber: booking.seatNumber },
-        },
-      });
-
-      await Booking.findByIdAndDelete(booking._id);
-
-      return res.json({
-        success: true,
-        status: "FAILED",
-        message: "Booking cancelled",
-      });
-    }
+    await Session.findByIdAndUpdate(booking.session, {
+      $pull: {
+        lockedSeats: { seatNumber: booking.seatNumber },
+      },
+    });
 
     return res.json({
-      success: true,
+      success: false,
       status: orderStatus,
+      bookingId: booking._id,
     });
   } catch (error) {
-    console.error("🔥 Verify Payment Error:", error.message);
+    console.error("Verify Payment Error:", error.message);
 
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       message: "Verification failed",
     });

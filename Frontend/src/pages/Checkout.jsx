@@ -1,30 +1,34 @@
-// Checkout.jsx
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import { createPaymentApi } from "../api/api";
+import {
+  createPaymentApi,
+  createBookingApi,
+  verifyPaymentApi,
+  cancelBookingApi,
+} from "../api/api";
 import { load } from "@cashfreepayments/cashfree-js";
+import { toast } from "react-toastify";
 
 export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const bookingId = location.state?.bookingId;
   const sessionId = location.state?.sessionId;
-
   const seatNumber = location.state?.seatNumber || "";
-  const amount = location.state?.amount || 149;
+  const amount = location.state?.amount || 0;
   const organizerName = location.state?.organizerName || "Organizer";
   const slotTime = location.state?.slotTime || "N/A";
 
   const cashfreeRef = useRef(null);
   const paymentLock = useRef(false);
+  const retryRef = useRef(0);
 
   const [loading, setLoading] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
     email: "",
-    seatNo: seatNumber,
+    phone: "",
   });
 
   useEffect(() => {
@@ -37,44 +41,96 @@ export default function Checkout() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
+  const verifyPayment = async (orderId, bookingId) => {
+    try {
+      const res = await verifyPaymentApi({ orderId });
+
+      if (res?.success) {
+        navigate(
+          `/payment-success?order_id=${orderId}&booking_id=${bookingId}&name=${encodeURIComponent(
+            form.name,
+          )}&email=${encodeURIComponent(form.email)}&seat=${encodeURIComponent(
+            seatNumber,
+          )}&slot=${encodeURIComponent(slotTime)}&organizer=${encodeURIComponent(
+            organizerName,
+          )}&amount=${amount}`,
+        );
+        return;
+      }
+
+      if (retryRef.current < 3) {
+        retryRef.current++;
+        setTimeout(() => verifyPayment(orderId, bookingId), 2000);
+        return;
+      }
+
+      await cancelBookingApi({ bookingId }).catch(() => {});
+
+      navigate("/payment-failed?booking_id=" + bookingId);
+    } catch {
+      await cancelBookingApi({ bookingId }).catch(() => {});
+      navigate("/payment-failed?booking_id=" + bookingId);
+    }
+  };
+
   const handlePayment = async () => {
+    if (!form.name || !form.email || !form.phone) {
+      toast.error("Fill all customer details");
+      return;
+    }
+
     if (!cashfreeRef.current || paymentLock.current) return;
 
     paymentLock.current = true;
     setLoading(true);
 
+    let bookingId = null;
+
     try {
-      const res = await createPaymentApi({
-        bookingId,
+      const bookingPayload = {
         sessionId,
-        seatNumber: form.seatNo,
-        amount,
+        seatNumber,
+        pricePerSeat: amount,
         customerName: form.name,
         customerEmail: form.email,
-      });
+        customerPhone: form.phone,
+      };
 
-      if (!res?.payment_session_id || !res?.orderId) {
-        throw new Error("Payment init failed");
+      const bookingRes = await createBookingApi(bookingPayload);
+
+      if (!bookingRes?.bookingId) {
+        throw new Error("Booking creation failed");
+      }
+
+      bookingId = bookingRes.bookingId;
+
+      const paymentPayload = {
+        bookingId,
+        customerName: form.name,
+        customerEmail: form.email,
+        customerPhone: form.phone,
+      };
+
+      const paymentRes = await createPaymentApi(paymentPayload);
+
+      if (!paymentRes?.payment_session_id) {
+        throw new Error("Payment initialization failed");
       }
 
       await cashfreeRef.current.checkout({
-        paymentSessionId: res.payment_session_id,
+        paymentSessionId: paymentRes.payment_session_id,
         redirectTarget: "_modal",
       });
 
-      navigate(
-        `/payment-success?order_id=${res.orderId}&name=${encodeURIComponent(
-          form.name,
-        )}&email=${encodeURIComponent(form.email)}&seat=${encodeURIComponent(
-          form.seatNo,
-        )}&slot=${encodeURIComponent(slotTime)}&organizer=${encodeURIComponent(
-          organizerName,
-        )}`,
-      );
-    } catch {
-      navigate("/payment-failed", {
-        state: { bookingId },
-      });
+      await verifyPayment(paymentRes.orderId, bookingId);
+    } catch (error) {
+      console.error(error.message);
+
+      if (bookingId) {
+        await cancelBookingApi({ bookingId }).catch(() => {});
+      }
+
+      navigate("/payment-failed");
     } finally {
       setLoading(false);
       paymentLock.current = false;
@@ -83,31 +139,28 @@ export default function Checkout() {
 
   return (
     <div className="min-h-screen flex justify-center items-center bg-gray-100 p-4">
-      <div className="w-full max-w-5xl bg-white shadow-xl rounded-2xl overflow-hidden flex flex-col md:flex-row">
-        {/* Booking Details */}
+      <div className="w-full max-w-5xl bg-white shadow-xl rounded-2xl flex flex-col md:flex-row overflow-hidden">
         <div className="md:w-1/2 bg-orange-50 p-6 space-y-3">
-          <h2 className="text-2xl font-bold text-orange-600 text-center mb-4">
+          <h2 className="text-2xl font-bold text-orange-600 text-center">
             Booking Details
           </h2>
 
-          <div className="space-y-2 text-gray-700 text-sm md:text-base">
-            <p>
-              <strong>Organizer:</strong> {organizerName}
-            </p>
-            <p>
-              <strong>Slot Time:</strong> {slotTime}
-            </p>
-            <p>
-              <strong>Seat No:</strong> {seatNumber}
-            </p>
+          <p>
+            <strong>Organizer:</strong> {organizerName}
+          </p>
+          <p>
+            <strong>Slot Time:</strong> {slotTime}
+          </p>
+          <p>
+            <strong>Seat No:</strong> {seatNumber}
+          </p>
 
-            <p className="text-lg font-semibold text-green-600">
-              Amount: ₹{amount}
-            </p>
+          <div className="pt-3 border-t">
+            <p className="text-sm text-gray-500">Seat Price</p>
+            <p className="text-xl font-bold text-green-600">₹{amount}</p>
           </div>
         </div>
 
-        {/* Customer Form */}
         <div className="md:w-1/2 p-6 flex flex-col justify-center">
           <h2 className="text-xl font-semibold text-center mb-6">
             Customer Details
@@ -125,8 +178,16 @@ export default function Checkout() {
             <input
               name="email"
               type="email"
-              placeholder="Email Address"
+              placeholder="Email"
               value={form.email}
+              onChange={handleChange}
+              className="w-full border p-2 rounded"
+            />
+
+            <input
+              name="phone"
+              placeholder="Phone Number"
+              value={form.phone}
               onChange={handleChange}
               className="w-full border p-2 rounded"
             />
@@ -134,7 +195,9 @@ export default function Checkout() {
             <button
               onClick={handlePayment}
               disabled={loading}
-              className="w-full bg-orange-500 hover:bg-orange-600 transition p-3 rounded text-white font-medium"
+              className={`w-full p-3 rounded text-white font-medium transition ${
+                loading ? "bg-gray-400" : "bg-orange-500 hover:bg-orange-600"
+              }`}
             >
               {loading ? "Processing..." : `Pay ₹${amount}`}
             </button>
