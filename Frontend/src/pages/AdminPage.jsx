@@ -61,8 +61,6 @@ const AdminPage = () => {
   const fetchSlots = useCallback(async () => {
     try {
       const data = await getSessionsApi();
-      console.log(data);
-
       setSlots(data || []);
     } catch {
       toast.error("Slot fetch failed");
@@ -72,6 +70,8 @@ const AdminPage = () => {
   const fetchBookings = useCallback(async () => {
     try {
       const res = await getAllBookingsApi();
+      console.log("fetched", res);
+
       setBookings(res || []);
     } catch {
       toast.error("Booking fetch failed");
@@ -529,31 +529,43 @@ const AdminPage = () => {
                       className="bg-gray-50 p-6 rounded-xl shadow space-y-2"
                     >
                       <p>
-                        <strong>User:</strong>{" "}
-                        {booking.userName || "Guest User"}
+                        <strong>Name :</strong>{" "}
+                        {booking.customerName || "Guest User"}
                       </p>
+
                       <p>
-                        <strong>Email:</strong> {booking.email || "N/A"}
+                        <strong>Email :</strong>{" "}
+                        {booking.customerEmail || "N/A"}
                       </p>
+
                       <p>
-                        <strong>Seat No:</strong> {booking.seatNumber}
+                        <strong>Phone :</strong>{" "}
+                        {booking.customerPhone || "N/A"}
                       </p>
+
                       <p>
-                        <strong>Booking Date:</strong>{" "}
+                        <strong>Seat-No :</strong> {booking.seatNumber}
+                      </p>
+
+                      <p>
+                        <strong>Booking-Date :</strong>{" "}
                         {formatDisplayDate(booking.createdAt)}
                       </p>
+
                       <p>
-                        <strong>Slot Date:</strong>{" "}
+                        <strong>Slot-Date :</strong>{" "}
                         {booking.session?.date
                           ? formatDisplayDate(booking.session.date)
                           : "N/A"}
                       </p>
+
                       <p>
-                        <strong>Slot Time:</strong>{" "}
+                        <strong>Slot-Time :</strong>{" "}
                         {booking.session?.time || "N/A"}
                       </p>
+
                       <p>
-                        <strong>Session Name:</strong>{" "}
+                        <strong>Session-Organiser-Name :</strong>{" "}
                         {booking.session?.name || "N/A"}
                       </p>
                     </div>
