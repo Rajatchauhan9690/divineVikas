@@ -38,9 +38,25 @@ MIDDLEWARE
 ========================================
 */
 
+// app.use(
+//   cors({
+//     origin: process.env.FRONTEND_URL,
+//     credentials: true,
+//   }),
+// );
+const allowedOrigins = process.env.FRONTEND_URL.split(",").map((origin) =>
+  origin.trim(),
+);
+
 app.use(
   cors({
-    origin: process.env.FRONTEND_URL,
+    origin: (origin, callback) => {
+      if (!origin || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error("CORS not allowed"));
+      }
+    },
     credentials: true,
   }),
 );
