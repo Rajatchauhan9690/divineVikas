@@ -8,11 +8,17 @@ export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
 
+  console.log("Location State:", location.state);
+
   const sessionId = location.state?.sessionId;
   const seatNumber = location.state?.seatNumber || "";
   const amount = location.state?.amount || 0;
   const organizerName = location.state?.organizerName || "Organizer";
   const slotTime = location.state?.slotTime || "N/A";
+
+  console.log("SessionId:", sessionId);
+  console.log("SeatNumber:", seatNumber);
+  console.log("Amount:", amount);
 
   const cashfreeRef = useRef(null);
   const paymentLock = useRef(false);
@@ -25,38 +31,66 @@ export default function Checkout() {
     phone: "",
   });
 
+  // Load Cashfree SDK
   useEffect(() => {
+    console.log("Loading Cashfree SDK...");
+
     load({ mode: "sandbox" }).then((cf) => {
+      console.log("Cashfree SDK Loaded:", cf);
       cashfreeRef.current = cf;
     });
   }, []);
 
   const handleChange = (e) => {
-    setForm({ ...form, [e.target.name]: e.target.value });
+    const { name, value } = e.target;
+
+    console.log("Input Changed:", name, value);
+
+    setForm({
+      ...form,
+      [name]: value,
+    });
   };
 
   const handlePayment = async () => {
+    console.log("Payment Button Clicked");
+
     if (!form.name || !form.email || !form.phone) {
       toast.error("Fill all customer details");
       return;
     }
 
-    if (!cashfreeRef.current || paymentLock.current) return;
+    if (!cashfreeRef.current) {
+      console.log("Cashfree SDK not ready");
+      return;
+    }
+
+    if (paymentLock.current) {
+      console.log("Payment already processing");
+      return;
+    }
 
     paymentLock.current = true;
     setLoading(true);
 
     try {
+      // Clean phone number
+      const cleanPhone = form.phone.replace(/^0+/, "");
+
       const bookingPayload = {
         sessionId,
         seatNumber,
         pricePerSeat: amount,
         customerName: form.name,
         customerEmail: form.email,
-        customerPhone: form.phone,
+        customerPhone: cleanPhone,
       };
 
+      console.log("Booking Payload:", bookingPayload);
+
       const bookingRes = await createBookingApi(bookingPayload);
+
+      console.log("Booking API Response:", bookingRes);
 
       if (!bookingRes?.bookingId) {
         throw new Error("Booking creation failed");
@@ -64,27 +98,38 @@ export default function Checkout() {
 
       const bookingId = bookingRes.bookingId;
 
+      console.log("Booking ID:", bookingId);
+
       const paymentPayload = {
         bookingId,
+        amount,
         customerName: form.name,
         customerEmail: form.email,
-        customerPhone: form.phone,
+        customerPhone: cleanPhone,
       };
 
+      console.log("Payment Payload:", paymentPayload);
+
       const paymentRes = await createPaymentApi(paymentPayload);
+
+      console.log("Payment API Response:", paymentRes);
 
       if (!paymentRes?.payment_session_id) {
         throw new Error("Payment initialization failed");
       }
+
+      console.log("Starting Cashfree Checkout");
 
       await cashfreeRef.current.checkout({
         paymentSessionId: paymentRes.payment_session_id,
         redirectTarget: "_self",
       });
     } catch (error) {
-      console.error(error.message);
+      console.error("Payment Error:", error);
       navigate("/payment-failed");
     } finally {
+      console.log("Resetting payment state");
+
       setLoading(false);
       paymentLock.current = false;
     }
@@ -93,6 +138,7 @@ export default function Checkout() {
   return (
     <div className="min-h-screen flex justify-center items-center bg-gray-100 p-4">
       <div className="w-full max-w-5xl bg-white shadow-xl rounded-2xl flex flex-col md:flex-row overflow-hidden">
+        {/* Booking Info */}
         <div className="md:w-1/2 bg-orange-50 p-6 space-y-3">
           <h2 className="text-2xl font-bold text-orange-600 text-center">
             Booking Details
@@ -114,6 +160,7 @@ export default function Checkout() {
           </div>
         </div>
 
+        {/* Customer Form */}
         <div className="md:w-1/2 p-6 flex flex-col justify-center">
           <h2 className="text-xl font-semibold text-center mb-6">
             Customer Details
@@ -140,8 +187,12 @@ export default function Checkout() {
             <input
               name="phone"
               placeholder="Phone Number"
+              maxLength={10}
               value={form.phone}
-              onChange={handleChange}
+              onChange={(e) => {
+                const value = e.target.value.replace(/\D/g, "");
+                setForm({ ...form, phone: value });
+              }}
               className="w-full border p-2 rounded"
             />
 
