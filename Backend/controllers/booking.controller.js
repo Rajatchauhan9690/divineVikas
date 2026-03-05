@@ -218,7 +218,7 @@ export const cancelBooking = async (req, res) => {
     console.log("❌ Cancel Booking API called");
     console.log("Request Body:", req.body);
 
-    const { bookingId } = req.body;
+    const { bookingId } = req.params;
 
     const booking = await Booking.findById(bookingId);
     console.log("Booking Found:", !!booking);
@@ -280,6 +280,55 @@ export const getAllBookings = async (req, res) => {
     console.error("🔥 Get Bookings Error:", error.message);
 
     res.status(500).json({
+      message: error.message,
+    });
+  }
+};
+export const getBookingById = async (req, res) => {
+  try {
+    console.log("📄 Get Booking By ID API called");
+
+    const { bookingId } = req.params;
+
+    console.log("📥 Booking ID received:", bookingId);
+
+    if (!bookingId) {
+      console.log("❌ bookingId not provided");
+
+      return res.status(400).json({
+        success: false,
+        message: "bookingId required",
+      });
+    }
+
+    console.log("🔍 Searching booking in database...");
+
+    const booking = await Booking.findById(bookingId).populate("session");
+
+    console.log("📦 Booking DB Result:", booking);
+
+    if (!booking) {
+      console.log("❌ Booking not found in database");
+
+      return res.status(404).json({
+        success: false,
+        message: "Booking not found",
+      });
+    }
+
+    console.log("✅ Booking found, sending response");
+
+    res.json({
+      success: true,
+      data: booking,
+    });
+  } catch (error) {
+    console.error("🔥 Get Booking By ID Error:", error);
+    console.error("🔥 Error Message:", error.message);
+    console.error("🔥 Error Stack:", error.stack);
+
+    res.status(500).json({
+      success: false,
       message: error.message,
     });
   }

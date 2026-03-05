@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { verifyPaymentApi, confirmBookingApi } from "../api/api";
+import { verifyPaymentApi, confirmBookingApi, getBookingApi } from "../api/api";
 
 export default function PaymentSuccess() {
   const [searchParams] = useSearchParams();
@@ -9,30 +9,56 @@ export default function PaymentSuccess() {
   const orderId = searchParams.get("order_id");
   const bookingId = searchParams.get("booking_id");
 
-  const name = searchParams.get("name") || "N/A";
-  const email = searchParams.get("email") || "N/A";
-  const seat = searchParams.get("seat") || "N/A";
-  const slot = searchParams.get("slot") || "N/A";
-  const organizer = searchParams.get("organizer") || "N/A";
-  const amount = searchParams.get("amount") || "0";
-
   const retryRef = useRef(0);
+
   const [status, setStatus] = useState("VERIFYING");
+  const [booking, setBooking] = useState(null);
 
   useEffect(() => {
-    if (!orderId || !bookingId) return;
+    if (!orderId || !bookingId) {
+      navigate("/payment-failed");
+      return;
+    }
 
     const verifyAndConfirm = async () => {
       try {
-        const res = await verifyPaymentApi({ orderId });
+        // 🔎 Step 1: Verify payment
+        const verifyRes = await verifyPaymentApi({ orderId });
 
-        if (res?.success) {
+        if (
+          verifyRes?.success ||
+          verifyRes?.order_status === "PAID" ||
+          verifyRes?.payment_status === "SUCCESS"
+        ) {
+          // 📌 Step 2: Confirm booking
           await confirmBookingApi({ bookingId });
+
+          // 📥 Step 3: Fetch booking details
+          const bookingRes = await getBookingApi(bookingId);
+
+          if (!bookingRes?.success) {
+            navigate("/payment-failed");
+            return;
+          }
+
+          const data = bookingRes.data;
+
+          setBooking({
+            name: data.customerName,
+            email: data.customerEmail,
+            phone: data.customerPhone,
+            seat: data.seatNumber,
+            slot: data.session?.time,
+            date: data.session?.date,
+            organizer: data.session?.name,
+            amount: data.totalAmount,
+          });
 
           setStatus("SUCCESS");
           return;
         }
 
+        // 🔁 Retry verification (Cashfree sometimes delays)
         if (retryRef.current < 3) {
           retryRef.current++;
           setTimeout(verifyAndConfirm, 2000);
@@ -40,13 +66,14 @@ export default function PaymentSuccess() {
         }
 
         navigate("/payment-failed");
-      } catch {
+      } catch (error) {
+        console.error("Verification error:", error);
         navigate("/payment-failed");
       }
     };
 
     verifyAndConfirm();
-  }, [orderId, bookingId]);
+  }, [orderId, bookingId, navigate]);
 
   if (status === "VERIFYING") {
     return (
@@ -55,6 +82,8 @@ export default function PaymentSuccess() {
       </div>
     );
   }
+
+  if (!booking) return null;
 
   return (
     <div className="min-h-screen flex justify-center items-center bg-green-50 p-4">
@@ -65,27 +94,38 @@ export default function PaymentSuccess() {
 
         <div className="grid md:grid-cols-2 gap-4 text-gray-700">
           <div className="bg-gray-50 p-4 rounded-lg">
-            <strong>Name:</strong> {name}
+            <strong>Name:</strong> {booking.name}
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg">
-            <strong>Email:</strong> {email}
+            <strong>Email:</strong> {booking.email}
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg">
-            <strong>Seat:</strong> {seat}
+            <strong>Phone:</strong> {booking.phone}
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg">
-            <strong>Slot:</strong> {slot}
+            <strong>Seat:</strong> {booking.seat}
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <strong>Slot:</strong> {booking.slot}
+          </div>
+
+          <div className="bg-gray-50 p-4 rounded-lg">
+            <strong>Date:</strong>{" "}
+            {booking.date ? new Date(booking.date).toLocaleDateString() : "N/A"}
           </div>
 
           <div className="bg-gray-50 p-4 rounded-lg md:col-span-2">
-            <strong>Organizer:</strong> {organizer}
+            <strong>Organizer:</strong> {booking.organizer}
           </div>
 
           <div className="bg-green-100 p-4 rounded-lg md:col-span-2 text-center">
-            <p className="text-xl font-bold text-green-700">Paid ₹{amount}</p>
+            <p className="text-xl font-bold text-green-700">
+              Paid ₹{booking.amount}
+            </p>
           </div>
         </div>
 

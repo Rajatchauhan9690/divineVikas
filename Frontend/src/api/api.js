@@ -48,7 +48,7 @@ export const confirmBookingApi = async (data) => {
  * Cancel booking
  */
 export const cancelBookingApi = async (bookingId) => {
-  const res = await API.delete(`/api/bookings/cancel-booking/${bookingId}`);
+  const res = await API.post(`/api/bookings/cancel-booking/${bookingId}`);
   return res.data;
 };
 
@@ -60,6 +60,13 @@ export const getAllBookingsApi = async () => {
   return res.data;
 };
 
+/**
+ * Get booking by id
+ */
+export const getBookingApi = async (bookingId) => {
+  const res = await API.get(`/api/bookings/${bookingId}`);
+  return res.data;
+};
 /* =====================================================
    PAYMENT APIs
 ===================================================== */

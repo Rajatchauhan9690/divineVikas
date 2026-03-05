@@ -6,6 +6,7 @@ import {
   unlockSeat,
   createBooking,
   confirmBooking,
+  getBookingById,
 } from "../controllers/booking.controller.js";
 
 const router = express.Router();
@@ -13,7 +14,8 @@ router.post("/lock-seat", lockSeat);
 router.post("/unlock-seat", unlockSeat);
 router.post("/create-booking", createBooking);
 router.post("/confirm-booking", confirmBooking);
-router.delete("/cancel-booking/:bookingId", cancelBooking);
+router.post("/cancel-booking/:bookingId", cancelBooking);
 router.get("/get-all-bookings", getAllBookings);
+router.get("/:bookingId", getBookingById);
 
 export default router;

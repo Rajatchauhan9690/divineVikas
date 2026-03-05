@@ -40,11 +40,7 @@ MIDDLEWARE
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:5173",
-      "https://divine-vikas-gcm4.vercel.app",
-      "https://www.divinevikas.com",
-    ],
+    origin: process.env.FRONTEND_URL,
     credentials: true,
   }),
 );

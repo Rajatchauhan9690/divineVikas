@@ -1,20 +1,37 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { useEffect } from "react";
+import { cancelBookingApi } from "../api/api";
 
 export default function PaymentFailed() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const bookingId = searchParams.get("booking_id");
+
+  useEffect(() => {
+    const cancelBooking = async () => {
+      if (!bookingId) return;
+
+      try {
+        await cancelBookingApi(bookingId);
+        console.log("Booking cancelled successfully");
+      } catch (error) {
+        console.error("Cancel booking failed", error);
+      }
+    };
+
+    cancelBooking();
+  }, [bookingId]);
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-50 to-gray-200 px-4">
       <div className="bg-white w-full max-w-md rounded-3xl shadow-2xl p-10 text-center">
-        {/* Top Accent Bar */}
         <div className="h-2 w-16 bg-red-600 mx-auto rounded-full mb-6"></div>
 
-        {/* Heading */}
         <h2 className="text-2xl font-semibold text-gray-800 mb-3">
           Payment Unsuccessful
         </h2>
 
-        {/* Message */}
         <p className="text-gray-500 text-sm leading-relaxed mb-8">
           We were unable to process your payment.
           <br />
@@ -22,7 +39,6 @@ export default function PaymentFailed() {
           try again to complete your reservation.
         </p>
 
-        {/* Buttons */}
         <div className="space-y-3">
           <button
             onClick={() => navigate("/booking")}

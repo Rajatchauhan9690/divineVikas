@@ -1,11 +1,6 @@
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
-import {
-  createPaymentApi,
-  createBookingApi,
-  verifyPaymentApi,
-  cancelBookingApi,
-} from "../api/api";
+import { createPaymentApi, createBookingApi } from "../api/api";
 import { load } from "@cashfreepayments/cashfree-js";
 import { toast } from "react-toastify";
 
@@ -21,7 +16,6 @@ export default function Checkout() {
 
   const cashfreeRef = useRef(null);
   const paymentLock = useRef(false);
-  const retryRef = useRef(0);
 
   const [loading, setLoading] = useState(false);
 
@@ -41,38 +35,6 @@ export default function Checkout() {
     setForm({ ...form, [e.target.name]: e.target.value });
   };
 
-  const verifyPayment = async (orderId, bookingId) => {
-    try {
-      const res = await verifyPaymentApi({ orderId });
-
-      if (res?.success) {
-        navigate(
-          `/payment-success?order_id=${orderId}&booking_id=${bookingId}&name=${encodeURIComponent(
-            form.name,
-          )}&email=${encodeURIComponent(form.email)}&seat=${encodeURIComponent(
-            seatNumber,
-          )}&slot=${encodeURIComponent(slotTime)}&organizer=${encodeURIComponent(
-            organizerName,
-          )}&amount=${amount}`,
-        );
-        return;
-      }
-
-      if (retryRef.current < 3) {
-        retryRef.current++;
-        setTimeout(() => verifyPayment(orderId, bookingId), 2000);
-        return;
-      }
-
-      await cancelBookingApi({ bookingId }).catch(() => {});
-
-      navigate("/payment-failed?booking_id=" + bookingId);
-    } catch {
-      await cancelBookingApi({ bookingId }).catch(() => {});
-      navigate("/payment-failed?booking_id=" + bookingId);
-    }
-  };
-
   const handlePayment = async () => {
     if (!form.name || !form.email || !form.phone) {
       toast.error("Fill all customer details");
@@ -83,8 +45,6 @@ export default function Checkout() {
 
     paymentLock.current = true;
     setLoading(true);
-
-    let bookingId = null;
 
     try {
       const bookingPayload = {
@@ -102,7 +62,7 @@ export default function Checkout() {
         throw new Error("Booking creation failed");
       }
 
-      bookingId = bookingRes.bookingId;
+      const bookingId = bookingRes.bookingId;
 
       const paymentPayload = {
         bookingId,
@@ -119,17 +79,10 @@ export default function Checkout() {
 
       await cashfreeRef.current.checkout({
         paymentSessionId: paymentRes.payment_session_id,
-        redirectTarget: "_modal",
+        redirectTarget: "_self",
       });
-
-      await verifyPayment(paymentRes.orderId, bookingId);
     } catch (error) {
       console.error(error.message);
-
-      if (bookingId) {
-        await cancelBookingApi({ bookingId }).catch(() => {});
-      }
-
       navigate("/payment-failed");
     } finally {
       setLoading(false);

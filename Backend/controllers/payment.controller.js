@@ -19,17 +19,23 @@ const validateBooking = async (bookingId) => {
 
 export const createPayment = async (req, res) => {
   try {
+    console.log("💳 Create Payment API Called");
+    console.log("Request Body:", req.body);
+
     const { bookingId, customerName, customerEmail, customerPhone } = req.body;
 
     const booking = await validateBooking(bookingId);
 
-    // Check existing pending payment
+    console.log("Booking Found:", booking._id);
+
     const existingPayment = await Payment.findOne({
       booking: booking._id,
       status: "PENDING",
     });
 
     if (existingPayment) {
+      console.log("⚠ Existing pending payment found");
+
       return res.json({
         orderId: existingPayment.orderId,
         payment_session_id: existingPayment.paymentSessionId,
@@ -37,6 +43,8 @@ export const createPayment = async (req, res) => {
     }
 
     const orderId = "order_" + Date.now();
+
+    console.log("Generated Order ID:", orderId);
 
     const orderRequest = {
       order_id: orderId,
@@ -48,7 +56,12 @@ export const createPayment = async (req, res) => {
         customer_email: customerEmail || "guest@email.com",
         customer_phone: customerPhone || "0000000000",
       },
+      order_meta: {
+        return_url: `${process.env.FRONTEND_URL}/payment-success?order_id={order_id}&booking_id=${bookingId}`,
+      },
     };
+
+    console.log("Cashfree Order Request:", orderRequest);
 
     const response = await axios.post(
       "https://sandbox.cashfree.com/pg/orders",
@@ -63,6 +76,8 @@ export const createPayment = async (req, res) => {
       },
     );
 
+    console.log("Cashfree Response:", response.data);
+
     const paymentSessionId = response.data.payment_session_id;
 
     await Payment.create({
@@ -74,12 +89,14 @@ export const createPayment = async (req, res) => {
       status: "PENDING",
     });
 
+    console.log("Payment Record Created");
+
     return res.json({
       orderId,
       payment_session_id: paymentSessionId,
     });
   } catch (error) {
-    console.error("Create Payment Error:", error.message);
+    console.error("🔥 Create Payment Error:", error);
 
     return res.status(500).json({
       success: false,
@@ -91,6 +108,7 @@ export const createPayment = async (req, res) => {
 export const verifyPayment = async (req, res) => {
   try {
     const { orderId } = req.body;
+    console.log("verify payment");
 
     if (!orderId) {
       return res.status(400).json({
