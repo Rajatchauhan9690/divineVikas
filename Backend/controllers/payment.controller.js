@@ -60,7 +60,7 @@ export const createPayment = async (req, res) => {
         return_url: `${process.env.FRONTEND_URL}/payment-success?order_id={order_id}&booking_id=${bookingId}`,
       },
     };
-
+    console.log("FRONTEND_URL:", process.env.FRONTEND_URL);
     console.log("Cashfree Order Request:", orderRequest);
 
     const response = await axios.post(
