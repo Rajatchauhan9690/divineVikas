@@ -1,53 +1,35 @@
 import { Server } from "socket.io";
 
-let io = null;
+let io;
 
-/*
-========================================
-SOCKET INITIALIZATION
-========================================
-*/
-
-export const initSocket = (server) => {
-  io = new Server(server, {
+export const initIO = (httpServer) => {
+  io = new Server(httpServer, {
     cors: {
-      origin: "*",
-      methods: ["GET", "POST", "DELETE", "PUT"],
+      origin: process.env.FRONTEND_URL || "http://localhost:5173",
+      methods: ["GET", "POST", "PUT", "DELETE"],
       credentials: true,
     },
   });
 
   io.on("connection", (socket) => {
-    console.log("⚡ Socket Connected:", socket.id);
-
-    /*
-    Join session room for seat realtime updates
-    */
+    console.log("🔌 New Client Connected:", socket.id);
 
     socket.on("join-session", (sessionId) => {
-      console.log("👥 Join Session Room:", sessionId);
-
       socket.join(sessionId);
+      console.log(`👤 Client ${socket.id} joined session room: ${sessionId}`);
     });
 
     socket.on("disconnect", () => {
-      console.log("❌ Socket Disconnected:", socket.id);
+      console.log("❌ Client Disconnected:", socket.id);
     });
   });
 
-  console.log("✅ Socket Server Initialized");
+  return io;
 };
-
-/*
-========================================
-GET SOCKET INSTANCE
-========================================
-*/
 
 export const getIO = () => {
   if (!io) {
     throw new Error("Socket.io not initialized");
   }
-
   return io;
 };

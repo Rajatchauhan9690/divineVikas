@@ -4,6 +4,7 @@ import { toast } from "react-toastify";
 
 import SeatGrid from "../components/booking/SeatGrid";
 import { getSessionsApi, lockSeatApi } from "../api/api";
+import socket from "../socket/socket"; // ✅ NEW: Import our socket instance
 
 import { getDateLimits, getTodayDate } from "../utils/dateUtils";
 import { parseSessionTime } from "../utils/timeUtils";
@@ -26,7 +27,6 @@ const BookingPage = () => {
       setLoading(true);
 
       const response = await getSessionsApi();
-      // console.log(response);
 
       const filtered = response
         .filter(
@@ -35,29 +35,62 @@ const BookingPage = () => {
         .sort((a, b) => parseSessionTime(a.time) - parseSessionTime(b.time));
 
       setSessions(filtered);
+
+      // If we already have a selected session, update its data to reflect live seat changes
+      if (selectedSession) {
+        const updatedCurrentSession = filtered.find(
+          (s) => s._id === selectedSession._id,
+        );
+        if (updatedCurrentSession) setSelectedSession(updatedCurrentSession);
+      }
     } catch (error) {
       console.error(error);
       toast.error("Failed to load sessions");
     } finally {
       setLoading(false);
     }
-  }, [selectedDate]);
+  }, [selectedDate, selectedSession]); // ✅ Added selectedSession to dependencies
 
   useEffect(() => {
     loadSessions();
-  }, [loadSessions]);
+  }, [selectedDate]); // ✅ Removed loadSessions from here to prevent infinite loops, rely on date change
 
+  // Set initial session when loading a new date
   useEffect(() => {
-    if (sessions.length > 0) {
+    if (sessions.length > 0 && !selectedSession) {
       setSelectedSession(sessions[0]);
-    } else {
+    } else if (sessions.length === 0) {
       setSelectedSession(null);
     }
   }, [sessions]);
 
-  const handleSeatSelect = (seatNumber) => {
+  // ✅ NEW: The Real-Time Socket Listener
+  useEffect(() => {
     if (!selectedSession) return;
 
+    console.log(`📡 Joining live room for session: ${selectedSession.name}`);
+
+    // Tell the backend we are looking at this specific session
+    socket.emit("join-session", selectedSession._id);
+
+    // Listen for the broadcast that a seat was locked/booked
+    const handleSeatUpdate = (updatedSessionId) => {
+      if (updatedSessionId === selectedSession._id) {
+        console.log("🔄 Live seat update received! Refreshing grid...");
+        loadSessions(); // Re-fetch the data to paint the grid with new locks
+      }
+    };
+
+    socket.on("seat-updated", handleSeatUpdate);
+
+    // Cleanup: Stop listening if the user switches sessions or leaves the page
+    return () => {
+      socket.off("seat-updated", handleSeatUpdate);
+    };
+  }, [selectedSession?._id]); // Only re-run if the session ID changes
+
+  const handleSeatSelect = (seatNumber) => {
+    if (!selectedSession) return;
     setSelectedSeat(seatNumber);
   };
 
@@ -77,20 +110,18 @@ const BookingPage = () => {
 
       setBookingLoading(true);
 
-      // ✅ Only lock seat here
       const res = await lockSeatApi({
         sessionId: selectedSession._id,
         seatNumber: selectedSeat,
       });
 
-      console.log("Lock response:", res);
-
       if (!res.success) {
-        toast.error(res.message || "Seat already locked");
+        toast.error(res.message || "Seat already taken");
+        // Force a refresh if they tried to click a ghost seat
+        loadSessions();
         return;
       }
 
-      // ✅ Move to checkout page
       navigate("/checkout", {
         state: {
           sessionId: selectedSession._id,
@@ -102,7 +133,7 @@ const BookingPage = () => {
       });
     } catch (error) {
       console.error(error);
-      toast.error("Booking failed");
+      toast.error(error.response?.data?.message || "Booking failed");
     } finally {
       setBookingLoading(false);
     }
@@ -111,11 +142,8 @@ const BookingPage = () => {
   return (
     <div className="w-full max-w-7xl mx-auto py-4 md:py-10 px-3 md:px-6 overflow-x-hidden">
       <div className="flex flex-col md:flex-row gap-6 h-full w-full">
-        <div
-          className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        rounded-xl p-4 h-[23vh] md:h-auto max-h-[calc(100vh-90px)]
-        overflow-y-auto overflow-x-hidden hide-scrollbar"
-        >
+        {/* Date & Slot Sidebar */}
+        <div className="w-full md:w-72 bg-white shadow-[0_0_20px_rgba(0,0,0,0.15)] rounded-xl p-4 h-[23vh] md:h-auto max-h-[calc(100vh-90px)] overflow-y-auto overflow-x-hidden hide-scrollbar">
           <h3 className="text-lg font-bold text-center mb-3">Select Date</h3>
 
           <input
@@ -123,7 +151,11 @@ const BookingPage = () => {
             value={selectedDate}
             min={minDate}
             max={maxDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e) => {
+              setSelectedDate(e.target.value);
+              setSelectedSession(null); // Reset session when date changes
+              setSelectedSeat(null);
+            }}
             className="w-full border rounded-lg p-2 mb-4"
           />
 
@@ -132,7 +164,7 @@ const BookingPage = () => {
           </h3>
 
           <div className="flex md:flex-col gap-2 overflow-x-auto hide-scrollbar pb-2">
-            {loading ? (
+            {loading && sessions.length === 0 ? (
               <div className="w-full h-[50px] md:h-[100px] flex items-center justify-center">
                 <div className="w-10 h-10 border-4 border-green-500 border-t-transparent rounded-full animate-spin" />
               </div>
@@ -144,7 +176,10 @@ const BookingPage = () => {
               sessions.map((session) => (
                 <button
                   key={session._id}
-                  onClick={() => setSelectedSession(session)}
+                  onClick={() => {
+                    setSelectedSession(session);
+                    setSelectedSeat(null);
+                  }}
                   className={`border rounded-lg p-2 transition min-w-[90px] md:w-full text-md ${
                     selectedSession?._id === session._id
                       ? "bg-green-500 text-white"
@@ -158,14 +193,11 @@ const BookingPage = () => {
           </div>
         </div>
 
-        <div
-          className="flex-1 w-full bg-white rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.15)]
-        p-4 max-h-[calc(100vh-90px)]
-        overflow-y-auto overflow-x-hidden hide-scrollbar"
-        >
+        {/* Seat Grid Area */}
+        <div className="flex-1 w-full bg-white rounded-xl shadow-[0_0_20px_rgba(0,0,0,0.15)] p-4 max-h-[calc(100vh-90px)] overflow-y-auto overflow-x-hidden hide-scrollbar">
           {!selectedSession ? (
             <div className="h-[500px] flex items-center justify-center text-gray-400 text-sm">
-              No available slots
+              Select a date and slot to view seats
             </div>
           ) : (
             <>
@@ -195,7 +227,7 @@ const BookingPage = () => {
                   {bookingLoading && (
                     <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
                   )}
-                  {bookingLoading ? "Booking..." : "Confirm Booking"}
+                  {bookingLoading ? "Locking Seat..." : "Confirm Booking"}
                 </button>
               </div>
             </>

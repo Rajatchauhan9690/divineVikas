@@ -3,23 +3,30 @@ const Seat = ({ seat, isSelected, onSeatSelect }) => {
 
   const handleClick = (e) => {
     e.stopPropagation();
-
     if (!disabled) {
       onSeatSelect(seat.number);
     }
   };
 
   let className =
-    "aspect-square flex items-center justify-center text-sm rounded-lg border transition-all duration-300 hover:scale-105 hover:shadow-md";
+    "w-full h-full flex items-center justify-center text-xs md:text-sm font-semibold rounded-full border transition-all duration-300";
 
   if (seat.booked) {
-    className += " bg-gray-300 cursor-not-allowed";
+    // Booked/Ghost State
+    className +=
+      " bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed seat-taken";
   } else if (seat.locked) {
-    className += " bg-yellow-300 cursor-not-allowed";
+    // Locked (Someone else clicked it) State
+    className +=
+      " bg-amber-100 text-amber-500 border-amber-300 cursor-not-allowed";
   } else if (isSelected) {
-    className += " bg-green-500 text-white shadow-lg";
+    // The "Ignited" State
+    className +=
+      " bg-gradient-to-br from-green-400 to-emerald-600 text-white border-transparent seat-selected";
   } else {
-    className += " hover:bg-green-100";
+    // The "Breathing" Available State
+    className +=
+      " bg-white text-slate-600 border-emerald-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer seat-available shadow-sm";
   }
 
   return (

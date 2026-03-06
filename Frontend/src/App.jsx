@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Hero from "./components/Hero";
 import Testimonial from "./components/Testimonial";
@@ -14,6 +14,7 @@ import Checkout from "./pages/Checkout";
 /* Booking System Pages */
 import BookingPage from "./pages/BookingPage";
 import AdminPage from "./pages/AdminPage";
+import AdminLogin from "./pages/AdminLogin"; // ✅ New Import
 
 /* Toast */
 import { ToastContainer } from "react-toastify";
@@ -22,7 +23,15 @@ import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 import PaymentSuccess from "./pages/PaymentSuccess";
 import PaymentFailed from "./pages/PaymentFailed";
-// import PaymentPending from "./pages/PaymentPending";
+
+// ✅ Protected Route Wrapper: Checks for the token before rendering the AdminPage
+const ProtectedAdminRoute = ({ children }) => {
+  const token = localStorage.getItem("adminToken");
+  return token ? children : <Navigate to="/admin-login" replace />;
+};
+
+// Inside Frontend/src/App.jsx
+// ... (keep your existing imports) ...
 
 export default function App() {
   return (
@@ -31,11 +40,11 @@ export default function App() {
 
       <BrowserRouter>
         <Routes>
-          {/* Main Landing Page */}
+          {/* Main Landing Page Wrapped in the Energy Mesh */}
           <Route
             path="/"
             element={
-              <>
+              <div className="bg-mesh min-h-screen text-slate-800 font-sans selection:bg-orange-500 selection:text-white">
                 <Hero />
                 <LifeSection />
                 <TransForm />
@@ -45,19 +54,35 @@ export default function App() {
                 <Testimonial />
                 <FAQ />
                 <StickyOffer />
-              </>
+              </div>
             }
           />
 
           {/* Booking System Routes */}
-          <Route path="/booking" element={<BookingPage />} />
-          <Route path="/admin" element={<AdminPage />} />
+          <Route
+            path="/booking"
+            element={
+              <div className="bg-mesh min-h-screen">
+                <BookingPage />
+              </div>
+            }
+          />
 
+          {/* Secured Admin Routes */}
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedAdminRoute>
+                <AdminPage />
+              </ProtectedAdminRoute>
+            }
+          />
+
+          {/* Payment Routes */}
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
           <Route path="/payment-failed" element={<PaymentFailed />} />
-
-          {/* <Route path="/payment-pending" element={<PaymentPending />} /> */}
         </Routes>
       </BrowserRouter>
     </>

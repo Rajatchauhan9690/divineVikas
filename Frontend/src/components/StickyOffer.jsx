@@ -1,31 +1,24 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import { Timer } from "lucide-react";
+
 export default function StickyOffer() {
   const [showBar, setShowBar] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // 10 minutes
-
+  const [timeLeft, setTimeLeft] = useState(300);
   const navigate = useNavigate();
 
-  // Show bar after scroll
   useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 10) {
-        setShowBar(true);
-      } else {
-        setShowBar(false);
-      }
-    };
-
+    const handleScroll = () => setShowBar(window.scrollY > 300);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
-  // Countdown Timer
   useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
+    const interval = setInterval(
+      () => setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0)),
+      1000,
+    );
     return () => clearInterval(interval);
   }, []);
 
@@ -33,36 +26,43 @@ export default function StickyOffer() {
   const seconds = String(timeLeft % 60).padStart(2, "0");
 
   return (
-    <div
-      className={`fixed bottom-0 left-0 w-full z-50 transition-transform duration-500
-      ${showBar ? "translate-y-0" : "translate-y-full"}`}
-    >
-      <div className="bg-white border-t-6 border-orange-500 rounded-t-2xl px-6 py-4">
-        <div className="max-w-6xl mx-auto flex flex-row items-center justify-between gap-4">
-          {/* Price Info */}
-          <div className="text-left">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold text-orange-500">₹149</span>
-              <span className="line-through font-semibold text-gray-400 text-lg">
-                ₹1499
-              </span>
+    <AnimatePresence>
+      {showBar && (
+        <motion.div
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
+        >
+          {/* The Glass Pill */}
+          <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 flex flex-col md:flex-row items-center gap-4 md:gap-8 shadow-2xl border border-white/60">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider line-through">
+                  ₹1499
+                </span>
+                <span className="text-2xl font-black text-orange-600 leading-none">
+                  ₹149
+                </span>
+              </div>
+              <div className="h-10 w-px bg-slate-300/50 hidden md:block"></div>
+              <div className="flex items-center gap-2 text-slate-700 bg-white/50 px-3 py-1.5 rounded-full border border-white/40">
+                <Timer size={16} className="text-orange-500 animate-pulse" />
+                <span className="font-bold text-sm">
+                  {minutes}:{seconds}
+                </span>
+              </div>
             </div>
 
-            <p className="text-gray-600 text-sm font-bold">
-              Offer Expires in{" "}
-              <span className="font-bold">
-                {minutes} : {seconds}
-              </span>
-            </p>
+            <button
+              onClick={() => navigate("/booking")}
+              className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap"
+            >
+              Book Healing Session
+            </button>
           </div>
-          <button
-            className="bg-orange-500 hover:bg-orange-600 transition text-white px-5 sm:px-8 py-3 rounded-xl text-base sm:text-lg font-semibold shadow-md"
-            onClick={() => navigate("/booking")}
-          >
-            Book My Healing Session
-          </button>
-        </div>
-      </div>
-    </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }

@@ -8,6 +8,42 @@ const API = axios.create({
   withCredentials: true,
 });
 
+// Automatically attach the token to every request if it exists
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("adminToken");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+/* =====================================================
+   ADMIN APIs
+===================================================== */
+
+/**
+ * Admin Login
+ */
+export const adminLoginApi = async (data) => {
+  const res = await API.post("/api/admin/login", data);
+  if (res.data.token) {
+    localStorage.setItem("adminToken", res.data.token);
+    // Attach token to future requests for this session
+    API.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
+  }
+  return res.data;
+};
+
+/**
+ * Admin Logout
+ */
+export const adminLogoutApi = async () => {
+  const res = await API.post("/api/admin/logout");
+  localStorage.removeItem("adminToken");
+  delete API.defaults.headers.common["Authorization"];
+  return res.data;
+};
+
 /* =====================================================
    BOOKING APIs
 ===================================================== */
@@ -53,7 +89,7 @@ export const cancelBookingApi = async (bookingId) => {
 };
 
 /**
- * Get all bookings
+ * Get all bookings (Protected)
  */
 export const getAllBookingsApi = async () => {
   const res = await API.get("/api/bookings/get-all-bookings");
@@ -67,6 +103,7 @@ export const getBookingApi = async (bookingId) => {
   const res = await API.get(`/api/bookings/${bookingId}`);
   return res.data;
 };
+
 /* =====================================================
    PAYMENT APIs
 ===================================================== */
@@ -92,7 +129,7 @@ export const verifyPaymentApi = async (data) => {
 ===================================================== */
 
 /**
- * Create session
+ * Create session (Protected)
  */
 export const createSessionApi = async (data) => {
   const res = await API.post("/api/session/create-session", data);
@@ -100,7 +137,7 @@ export const createSessionApi = async (data) => {
 };
 
 /**
- * Delete session
+ * Delete session (Protected)
  */
 export const deleteSessionApi = async (id) => {
   const res = await API.delete(`/api/session/delete-session/${id}`);
@@ -108,7 +145,7 @@ export const deleteSessionApi = async (id) => {
 };
 
 /**
- * Get all sessions
+ * Get all sessions (Public)
  */
 export const getSessionsApi = async () => {
   const res = await API.get("/api/session/get-all-session");
