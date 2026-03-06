@@ -99,6 +99,8 @@ Frontend/
       booking/
         Seat.jsx
         SeatGrid.jsx
+      AkashicTunnel.jsx
+      EnergyCore.jsx
       FAQ.jsx
       Hero.jsx
       LifeSection.jsx
@@ -115,6 +117,7 @@ Frontend/
       AdminPage.jsx
       BookingPage.jsx
       Checkout.jsx
+      LandingPage3d.jsx
       PaymentFailed.jsx
       PaymentSuccess.jsx
     socket/
@@ -138,6 +141,296 @@ Frontend/
 
 <files>
 This section contains the contents of the repository's files.
+
+<file path="Frontend/src/components/AkashicTunnel.jsx">
+import { useRef, useMemo } from "react";
+import { useFrame } from "@react-three/fiber";
+import { useScroll } from "@react-three/drei";
+import * as THREE from "three";
+
+const count = 150; // Number of floating geometries
+const tunnelDepth = 250; // How deep the tunnel goes
+
+// ✅ FIX: We generate the random particles OUTSIDE the component.
+// This prevents React's strict compiler from flagging impure functions during render,
+// and ensures the geometries never randomly change positions if the component re-renders.
+const particles = Array.from({ length: count }, () => {
+  const theta = Math.random() * Math.PI * 2;
+  const radius = 6 + Math.random() * 10; // Keep the center hollow for the camera
+
+  return {
+    x: Math.cos(theta) * radius,
+    y: Math.sin(theta) * radius,
+    z: Math.random() * -tunnelDepth,
+    rx: Math.random() * Math.PI,
+    ry: Math.random() * Math.PI,
+    rz: Math.random() * Math.PI,
+    scale: 0.5 + Math.random() * 1.5,
+    rotationSpeed: 0.005 + Math.random() * 0.015,
+  };
+});
+
+export default function AkashicTunnel() {
+  const meshRef = useRef();
+  const scroll = useScroll(); // Hijacks the scroll wheel progress (0 to 1)
+
+  const dummy = useMemo(() => new THREE.Object3D(), []);
+
+  useFrame((state) => {
+    // scroll.offset goes from 0 (top of page) to 1 (bottom of page)
+    const offset = scroll.offset;
+
+    // 1. Move the entire tunnel toward the camera based on scroll
+    meshRef.current.position.z = offset * (tunnelDepth * 0.85);
+
+    // 2. Twist the entire tunnel as you fly through it
+    meshRef.current.rotation.z = offset * Math.PI;
+
+    // 3. Organically rotate the individual geometries
+    particles.forEach((p, i) => {
+      p.rx += p.rotationSpeed;
+      p.ry += p.rotationSpeed;
+
+      dummy.position.set(p.x, p.y, p.z);
+      dummy.rotation.set(p.rx, p.ry, p.rz);
+      dummy.scale.set(p.scale, p.scale, p.scale);
+      dummy.updateMatrix();
+
+      meshRef.current.setMatrixAt(i, dummy.matrix);
+    });
+
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  return (
+    // InstancedMesh renders 350 complex objects using only 1 draw call (Elite Performance)
+    <instancedMesh ref={meshRef} args={[null, null, count]}>
+      <octahedronGeometry args={[1, 0]} />
+      <meshStandardMaterial
+        color="#f97316"
+        emissive="#fbbf24"
+        emissiveIntensity={1.5}
+        wireframe
+        transparent
+        opacity={0.25}
+      />
+    </instancedMesh>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/EnergyCore.jsx">
+import { useRef } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import {
+  Sphere,
+  MeshDistortMaterial,
+  Sparkles,
+  Float,
+} from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+import * as THREE from "three";
+
+const Core = () => {
+  const groupRef = useRef();
+  const auraRef = useRef();
+
+  useFrame((state) => {
+    const t = state.clock.getElapsedTime();
+
+    groupRef.current.rotation.y = t * 0.15;
+    groupRef.current.rotation.z = t * 0.05;
+
+    const targetX = state.pointer.x * 0.3;
+    const targetY = state.pointer.y * 0.3;
+    groupRef.current.position.x = THREE.MathUtils.lerp(
+      groupRef.current.position.x,
+      targetX,
+      0.05,
+    );
+    groupRef.current.position.y = THREE.MathUtils.lerp(
+      groupRef.current.position.y,
+      targetY,
+      0.05,
+    );
+
+    if (auraRef.current) {
+      auraRef.current.distort = 0.2 + Math.sin(t * 2) * 0.05;
+    }
+  });
+
+  return (
+    <group ref={groupRef}>
+      <Float speed={2} rotationIntensity={0.5} floatIntensity={1}>
+        {/* OPTIMIZED: Reduced segments from 64x64 to 32x32. Looks the same, runs 4x faster */}
+        <Sphere args={[1.2, 32, 32]}>
+          <MeshDistortMaterial
+            color="#ea580c"
+            emissive="#ea580c"
+            emissiveIntensity={2}
+            distort={0.4}
+            speed={3}
+            roughness={0.2}
+            metalness={0.8}
+          />
+        </Sphere>
+
+        {/* OPTIMIZED: Reduced to 24x24 */}
+        <Sphere args={[1.4, 24, 24]}>
+          <MeshDistortMaterial
+            color="#fde047"
+            emissive="#fbbf24"
+            emissiveIntensity={2}
+            wireframe
+            distort={0.5}
+            speed={2}
+          />
+        </Sphere>
+
+        <Sphere args={[1.6, 32, 32]}>
+          <MeshDistortMaterial
+            ref={auraRef}
+            color="#f43f5e"
+            emissive="#e11d48"
+            emissiveIntensity={1.5}
+            transparent
+            opacity={0.2}
+            distort={0.2}
+            speed={1.5}
+          />
+        </Sphere>
+
+        <Sparkles
+          count={150} /* Reduced count for performance */
+          scale={5}
+          size={4}
+          speed={0.6}
+          color="#fef08a"
+          opacity={0.8}
+        />
+      </Float>
+    </group>
+  );
+};
+
+export default function EnergyCore() {
+  return (
+    <div className="absolute inset-0 w-full h-full cursor-crosshair z-10">
+      {/* OPTIMIZED: dpr={[1, 1.5]} stops the canvas from rendering at 3x scale on iPhones/Macs */}
+      {/* OPTIMIZED: gl={{ powerPreference: "high-performance" }} asks the OS for the dedicated GPU */}
+      <Canvas
+        dpr={[1, 1.5]}
+        gl={{ powerPreference: "high-performance", antialias: false }}
+        camera={{ position: [0, 0, 4.5], fov: 45 }}
+      >
+        <ambientLight intensity={0.5} />
+        <directionalLight
+          position={[10, 10, 5]}
+          intensity={2}
+          color="#f97316"
+        />
+
+        <Core />
+
+        <EffectComposer disableNormalPass>
+          {/* OPTIMIZED: resolution={256} drastically reduces the math required for the glow */}
+          <Bloom
+            luminanceThreshold={0.1}
+            luminanceSmoothing={0.9}
+            intensity={1.5}
+            resolution={256}
+            mipmapBlur
+          />
+        </EffectComposer>
+      </Canvas>
+    </div>
+  );
+}
+</file>
+
+<file path="Frontend/src/pages/LandingPage3d.jsx">
+import { Canvas } from "@react-three/fiber";
+import { ScrollControls, Scroll } from "@react-three/drei";
+import { EffectComposer, Bloom } from "@react-three/postprocessing";
+
+import Hero from "../components/Hero";
+import LifeSection from "../components/LifeSection";
+import TransForm from "../components/Transform";
+import LifeWorkshop from "../components/LifeWorkshop";
+import Personal from "../components/Personal";
+import WorkShop from "../components/WorkShop";
+import Testimonial from "../components/Testimonial";
+import FAQ from "../components/FAQ";
+import StickyOffer from "../components/StickyOffer";
+
+import AkashicTunnel from "../components/AkashicTunnel";
+
+export default function LandingPage3D() {
+  return (
+    <div className="w-screen h-screen bg-mesh overflow-hidden fixed inset-0">
+      <Canvas
+        dpr={[1, 1.5]}
+        gl={{ powerPreference: "high-performance", antialias: false }}
+        camera={{ position: [0, 0, 5], fov: 60 }}
+        // ❌ REMOVED the invalid events prop that was crashing the canvas
+      >
+        <ambientLight intensity={0.4} />
+        <directionalLight
+          position={[10, 10, 10]}
+          intensity={1}
+          color="#f97316"
+        />
+
+        <ScrollControls pages={9} damping={0.2} distance={1.2}>
+          <Scroll>
+            <AkashicTunnel />
+          </Scroll>
+
+          <Scroll html style={{ width: "100%" }}>
+            <div className="holographic-overlay text-slate-800">
+              <Hero />
+              <LifeSection />
+              <TransForm />
+              <LifeWorkshop />
+              <Personal />
+              <WorkShop />
+              <Testimonial />
+              <FAQ />
+            </div>
+          </Scroll>
+        </ScrollControls>
+
+        <EffectComposer disableNormalPass>
+          <Bloom
+            luminanceThreshold={0.3}
+            luminanceSmoothing={0.9}
+            intensity={1}
+            resolution={256}
+          />
+        </EffectComposer>
+      </Canvas>
+
+      <StickyOffer />
+    </div>
+  );
+}
+</file>
+
+<file path="Backend/config/db.js">
+import mongoose from "mongoose";
+
+const connectDB = async () => {
+  try {
+    await mongoose.connect(process.env.MONGO_URI);
+    console.log("✅ MongoDB Connected");
+  } catch (error) {
+    console.error("❌ DB Error:", error.message);
+    process.exit(1);
+  }
+};
+
+export default connectDB;
+</file>
 
 <file path="Backend/controllers/admin.controller.js">
 import jwt from "jsonwebtoken";
@@ -304,117 +597,6 @@ router.post("/login", adminLogin);
 router.post("/logout", adminLogout);
 
 export default router;
-</file>
-
-<file path="Frontend/src/pages/AdminLogin.jsx">
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { adminLoginApi } from "../api/api";
-import { toast } from "react-toastify";
-
-export default function AdminLogin() {
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const navigate = useNavigate();
-
-  const handleLogin = async (e) => {
-    e.preventDefault();
-    try {
-      await adminLoginApi({ email, password });
-      toast.success("Login successful");
-      navigate("/admin");
-    } catch (error) {
-      toast.error(error.response?.data?.message || "Login failed");
-    }
-  };
-
-  return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-100">
-      <form
-        onSubmit={handleLogin}
-        className="bg-white p-8 rounded-xl shadow-md w-96"
-      >
-        <h2 className="text-2xl font-bold mb-6 text-center">Admin Access</h2>
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          className="w-full border p-3 rounded mb-4"
-          required
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          className="w-full border p-3 rounded mb-6"
-          required
-        />
-        <button
-          type="submit"
-          className="w-full bg-orange-500 text-white p-3 rounded font-bold hover:bg-orange-600"
-        >
-          Login
-        </button>
-      </form>
-    </div>
-  );
-}
-</file>
-
-<file path="Backend/config/db.js">
-import mongoose from "mongoose";
-
-const connectDB = async () => {
-  try {
-    await mongoose.connect(process.env.MONGO_URI);
-    console.log("✅ MongoDB Connected");
-  } catch (error) {
-    console.error("❌ DB Error:", error.message);
-    process.exit(1);
-  }
-};
-
-export default connectDB;
-</file>
-
-<file path="Backend/socket/socket.js">
-import { Server } from "socket.io";
-
-let io;
-
-export const initIO = (httpServer) => {
-  io = new Server(httpServer, {
-    cors: {
-      origin: process.env.FRONTEND_URL || "http://localhost:5173",
-      methods: ["GET", "POST", "PUT", "DELETE"],
-      credentials: true,
-    },
-  });
-
-  io.on("connection", (socket) => {
-    console.log("🔌 New Client Connected:", socket.id);
-
-    socket.on("join-session", (sessionId) => {
-      socket.join(sessionId);
-      console.log(`👤 Client ${socket.id} joined session room: ${sessionId}`);
-    });
-
-    socket.on("disconnect", () => {
-      console.log("❌ Client Disconnected:", socket.id);
-    });
-  });
-
-  return io;
-};
-
-export const getIO = () => {
-  if (!io) {
-    throw new Error("Socket.io not initialized");
-  }
-  return io;
-};
 </file>
 
 <file path="Backend/utils/lock.util.js">
@@ -664,18 +846,61 @@ dist
 <svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" role="img" class="iconify iconify--logos" width="31.88" height="32" preserveAspectRatio="xMidYMid meet" viewBox="0 0 256 257"><defs><linearGradient id="IconifyId1813088fe1fbc01fb466" x1="-.828%" x2="57.636%" y1="7.652%" y2="78.411%"><stop offset="0%" stop-color="#41D1FF"></stop><stop offset="100%" stop-color="#BD34FE"></stop></linearGradient><linearGradient id="IconifyId1813088fe1fbc01fb467" x1="43.376%" x2="50.316%" y1="2.242%" y2="89.03%"><stop offset="0%" stop-color="#FFEA83"></stop><stop offset="8.333%" stop-color="#FFDD35"></stop><stop offset="100%" stop-color="#FFA800"></stop></linearGradient></defs><path fill="url(#IconifyId1813088fe1fbc01fb466)" d="M255.153 37.938L134.897 252.976c-2.483 4.44-8.862 4.466-11.382.048L.875 37.958c-2.746-4.814 1.371-10.646 6.827-9.67l120.385 21.517a6.537 6.537 0 0 0 2.322-.004l117.867-21.483c5.438-.991 9.574 4.796 6.877 9.62Z"></path><path fill="url(#IconifyId1813088fe1fbc01fb467)" d="M185.432.063L96.44 17.501a3.268 3.268 0 0 0-2.634 3.014l-5.474 92.456a3.268 3.268 0 0 0 3.997 3.378l24.777-5.718c2.318-.535 4.413 1.507 3.936 3.838l-7.361 36.047c-.495 2.426 1.782 4.5 4.151 3.78l15.304-4.649c2.372-.72 4.652 1.36 4.15 3.788l-11.698 56.621c-.732 3.542 3.979 5.473 5.943 2.437l1.313-2.028l72.516-144.72c1.215-2.423-.88-5.186-3.54-4.672l-25.505 4.922c-2.396.462-4.435-1.77-3.759-4.114l16.646-57.705c.677-2.35-1.37-4.583-3.769-4.113Z"></path></svg>
 </file>
 
-<file path="Frontend/src/socket/socket.js">
-import { io } from "socket.io-client";
+<file path="Frontend/src/pages/AdminLogin.jsx">
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { adminLoginApi } from "../api/api";
+import { toast } from "react-toastify";
 
-// Dynamically connect to the backend URL defined in .env
-// Fallback to 5001 for local development
-const URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
+export default function AdminLogin() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const navigate = useNavigate();
 
-const socket = io(URL, {
-  withCredentials: true,
-});
+  const handleLogin = async (e) => {
+    e.preventDefault();
+    try {
+      await adminLoginApi({ email, password });
+      toast.success("Login successful");
+      navigate("/admin");
+    } catch (error) {
+      toast.error(error.response?.data?.message || "Login failed");
+    }
+  };
 
-export default socket;
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+      <form
+        onSubmit={handleLogin}
+        className="bg-white p-8 rounded-xl shadow-md w-96"
+      >
+        <h2 className="text-2xl font-bold mb-6 text-center">Admin Access</h2>
+        <input
+          type="email"
+          placeholder="Email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="w-full border p-3 rounded mb-4"
+          required
+        />
+        <input
+          type="password"
+          placeholder="Password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          className="w-full border p-3 rounded mb-6"
+          required
+        />
+        <button
+          type="submit"
+          className="w-full bg-orange-500 text-white p-3 rounded font-bold hover:bg-orange-600"
+        >
+          Login
+        </button>
+      </form>
+    </div>
+  );
+}
 </file>
 
 <file path="Frontend/src/utils/cacheUtils.js">
@@ -776,22 +1001,6 @@ export default defineConfig([
     },
   },
 ])
-</file>
-
-<file path="Frontend/index.html">
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>vikas</title>
-  </head>
-  <body>
-    <div id="root"></div>
-    <script type="module" src="/src/main.jsx"></script>
-  </body>
-</html>
 </file>
 
 <file path="Frontend/README.md">
@@ -929,39 +1138,42 @@ const paymentSchema = new mongoose.Schema(
 export default mongoose.model("Payment", paymentSchema);
 </file>
 
-<file path="Frontend/src/components/booking/Seat.jsx">
-const Seat = ({ seat, isSelected, onSeatSelect }) => {
-  const disabled = seat.booked || seat.locked;
+<file path="Backend/socket/socket.js">
+import { Server } from "socket.io";
 
-  const handleClick = (e) => {
-    e.stopPropagation();
+let io;
 
-    if (!disabled) {
-      onSeatSelect(seat.number);
-    }
-  };
+export const initIO = (httpServer) => {
+  io = new Server(httpServer, {
+    cors: {
+      origin: process.env.FRONTEND_URL || "http://localhost:5173",
+      methods: ["GET", "POST", "PUT", "DELETE"],
+      credentials: true,
+    },
+  });
 
-  let className =
-    "aspect-square flex items-center justify-center text-sm rounded-lg border transition-all duration-300 hover:scale-105 hover:shadow-md";
+  io.on("connection", (socket) => {
+    console.log("🔌 New Client Connected:", socket.id);
 
-  if (seat.booked) {
-    className += " bg-gray-300 cursor-not-allowed";
-  } else if (seat.locked) {
-    className += " bg-yellow-300 cursor-not-allowed";
-  } else if (isSelected) {
-    className += " bg-green-500 text-white shadow-lg";
-  } else {
-    className += " hover:bg-green-100";
-  }
+    socket.on("join-session", (sessionId) => {
+      socket.join(sessionId);
+      console.log(`👤 Client ${socket.id} joined session room: ${sessionId}`);
+    });
 
-  return (
-    <button disabled={disabled} onClick={handleClick} className={className}>
-      {seat.number}
-    </button>
-  );
+    socket.on("disconnect", () => {
+      console.log("❌ Client Disconnected:", socket.id);
+    });
+  });
+
+  return io;
 };
 
-export default Seat;
+export const getIO = () => {
+  if (!io) {
+    throw new Error("Socket.io not initialized");
+  }
+  return io;
+};
 </file>
 
 <file path="Frontend/src/components/FAQ.jsx">
@@ -1036,379 +1248,6 @@ export default function FAQSection() {
 }
 </file>
 
-<file path="Frontend/src/components/Hero.jsx">
-import { useEffect, useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-
-export default function Hero() {
-  const [timeLeft, setTimeLeft] = useState(300);
-  const [toastMessage, setToastMessage] = useState("");
-
-  const navigate = useNavigate();
-
-  const users = [
-    "Rajat",
-    "Aman",
-    "Priya",
-    "Neha",
-    "Arjun",
-    "Simran",
-    "Karan",
-    "Anjali",
-    "Rahul",
-    "Pooja",
-    "Vikram",
-    "Sneha",
-    "Aditya",
-    "Kavya",
-    "Rohit",
-    "Isha",
-    "Manish",
-    "Nikita",
-    "Sahil",
-    "Megha",
-    "Yash",
-    "Tanya",
-  ];
-
-  // Countdown Timer
-  useEffect(() => {
-    if (timeLeft <= 0) return;
-
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => prev - 1);
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, [timeLeft]);
-
-  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
-  const seconds = String(timeLeft % 60).padStart(2, "0");
-
-  // Toast Notifications
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const randomUser = users[Math.floor(Math.random() * users.length)];
-      setToastMessage(`${randomUser} has joined`);
-
-      setTimeout(() => {
-        setToastMessage("");
-      }, 3000);
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  return (
-    <section className="w-full overflow-hidden">
-      {/* ================= HERO TOP BANNER ================= */}
-      <div className="bg-orange-500 text-white text-center rounded-b-2xl px-4 py-4 md:py-6 mx-4 md:mx-10">
-        <h1 className="text-[16px] leading-tight font-bold md:text-4xl md:leading-snug max-w-3xl mx-auto">
-          One Day Whole Body Healing Master Class
-        </h1>
-
-        <p className="mt-2 text-[14px] md:text-lg max-w-2xl mx-auto">
-          Heal Deeply | Transform Gently | Learn Easily
-        </p>
-      </div>
-
-      {/* ================= MAIN CONTENT ================= */}
-      <div className="bg-white px-4 py-10 space-y-16">
-        {/* ===== Heading Section ===== */}
-        <div className="max-w-6xl mx-auto text-center">
-          <p className="text-sm md:text-base text-gray-600 font-medium">
-            Feeling Stuck, Drained or overwhelmed? or want to explore cosmos?
-          </p>
-
-          <p className="mt-2 text-orange-500 font-semibold tracking-wide">
-            Acknowledge everything here!
-          </p>
-
-          <h2 className="mt-4 text-xl md:text-4xl font-extrabold text-black leading-snug">
-            Experience Powerful Holistic Method Of Healing{" "}
-            <span className="text-orange-500">That Works On The </span>
-            Mind, Body, Emotions And Energy Systems{" "}
-            <span className="text-orange-500">
-              Release Blockages, Restore Balance.
-            </span>
-          </h2>
-
-          <p className="mt-4 text-gray-700 text-sm md:text-lg">
-            Using the energy of <strong>Cosmos,</strong>
-            <strong>You and Me</strong>
-          </p>
-        </div>
-
-        {/* ===== Image + Benefits Section ===== */}
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
-          <div className="rounded-lg overflow-hidden w-full h-60 md:h-[350px] lg:h-[400px]">
-            <img
-              src="/Images/myphoto.png"
-              alt="Workshop Video"
-              loading="lazy"
-              className="w-full h-full object-contain"
-            />
-          </div>
-
-          <div className="bg-gray-100 p-6 md:p-8 rounded-2xl">
-            <h3 className="text-xl md:text-2xl font-extrabold text-black mb-6">
-              Why You Will Get In One Day?
-            </h3>
-
-            <ul className="space-y-4">
-              {[
-                "Understanding whole body healing and energy alignment",
-                "Guided healing session for stress, anxiety, emotional heaviness & fatigue",
-                "Activation of self-healing awareness",
-                "Techniques to calm the nervous system and balance energy flow",
-                "Feeling of lightness, clarity, and inner stability",
-                "Better understanding of your healing needs",
-              ].map((text, index) => (
-                <li
-                  key={index}
-                  className="flex items-start gap-4 bg-white p-4 rounded-xl"
-                >
-                  <span className="bg-orange-500 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold flex-shrink-0">
-                    ✓
-                  </span>
-                  <p className="text-gray-800 text-sm md:text-base font-medium">
-                    {text}
-                  </p>
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        {/* ===== Profile + CTA Section ===== */}
-        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-start">
-          {/* Left */}
-          <div className="space-y-6">
-            <div className="bg-gray-100 rounded-2xl p-6 flex gap-4 items-center">
-              <img
-                src="/Images/myphoto.png"
-                alt="Dr. Vikas Chauhan"
-                className="w-20 h-20 rounded-full border-4 border-orange-400 object-cover flex-shrink-0"
-              />
-              <div>
-                <p className="text-sm text-gray-600">
-                  I will be the one <strong>to help you</strong>
-                </p>
-                <h3 className="text-lg md:text-xl font-extrabold text-black">
-                  VIKAS CHAUHAN
-                </h3>
-                <p className="text-orange-500 font-semibold text-sm">
-                  Guided Meditation Expert, Akashic Reader, Astrology Aspirant
-                </p>
-                <p className="text-sm text-gray-600">
-                  Learned from best mentors and real life experiences
-                </p>
-              </div>
-            </div>
-
-            <div className="bg-gray-100 rounded-2xl p-6 flex items-center gap-4">
-              <div className="text-yellow-400 text-lg">★★★★★</div>
-              <p className="text-sm md:text-base text-gray-800 font-medium">
-                High Rated Meditation Facilitator <strong>4.95 Stars</strong> by{" "}
-                <strong>1000+ participants</strong>
-              </p>
-            </div>
-          </div>
-
-          {/* Right CTA */}
-          <div className="text-center space-y-5">
-            <button
-              className="w-full bg-orange-500 hover:bg-orange-600 transition text-white py-4 rounded-full text-lg font-extrabold"
-              onClick={() => navigate("/booking")}
-            >
-              JOIN NOW
-            </button>
-
-            <p className="text-sm md:text-base text-gray-700">
-              Grab your Success Roadmap in <strong>just 5 minutes</strong>
-            </p>
-
-            <p className="text-sm md:text-base text-gray-700">
-              WORKSHOP STARTS ON <strong>14th Feb 2026</strong> (9:30 PM)
-            </p>
-
-            <h4 className="text-lg md:text-xl font-extrabold text-black">
-              Register In Next{" "}
-              <span className="text-orange-500">
-                {minutes}:{seconds}
-              </span>{" "}
-              Min
-            </h4>
-
-            <div className="flex justify-center gap-6">
-              <div className="bg-gray-100 rounded-xl px-6 py-4 w-28">
-                <p className="text-3xl font-extrabold text-black">{minutes}</p>
-                <p className="text-xs text-gray-600 mt-1">MINUTES</p>
-              </div>
-
-              <div className="bg-gray-100 rounded-xl px-6 py-4 w-28">
-                <p className="text-3xl font-extrabold text-black">{seconds}</p>
-                <p className="text-xs text-gray-600 mt-1">SECONDS</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* ================= TOAST ================= */}
-      {toastMessage && (
-        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-50">
-          <div className="bg-white text-black px-4 py-3 rounded-lg shadow-lg text-sm md:text-base font-semibold animate-fadeIn">
-            {toastMessage}
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
-</file>
-
-<file path="Frontend/src/components/LifeSection.jsx">
-import React from "react";
-
-export default function LifeSection() {
-  const items = [
-    {
-      bold: "Feel emotionally stuck, drained, or overwhelmed",
-    },
-    {
-      bold: "Are dealing with stress, anxiety, or unresolved emotions",
-    },
-    {
-      bold: "Want natural, healing support",
-    },
-    {
-      bold: "Are curious about energy healing but unsure where to start",
-    },
-    {
-      bold: "Want to experience healing before committing healing to yourself",
-    },
-    {
-      bold: "Are ready to perform remedies on mental plain due to lack of time",
-    },
-  ];
-
-  return (
-    <section className="w-full bg-white py-10 px-6">
-      <div className="max-w-5xl mx-auto">
-        {/* Heading */}
-        <div className="text-center mb-10">
-          <h2 className="text-3xl md:text-4xl font-semibold text-gray-900">
-            Who Is <span className="text-orange-500">this</span> for?
-          </h2>
-          <div className="w-16 h-1 bg-orange-500 mx-auto mt-4 rounded-full" />
-        </div>
-
-        {/* Card Wrapper */}
-        <div className="bg-gray-100 rounded-2xl p-6 md:p-10">
-          <div className="space-y-5">
-            {items.map((item, index) => (
-              <div
-                key={index}
-                className="flex items-start gap-4 bg-white rounded-xl p-5"
-              >
-                {/* Check Icon */}
-                <div className="flex-shrink-0 w-8 h-8 rounded-full border-2 border-orange-500 flex items-center justify-center">
-                  <span className="text-orange-500 text-lg">✓</span>
-                </div>
-
-                {/* Text */}
-                <p className="text-gray-800 text-lg">
-                  <span className="font-semibold">{item.bold}</span> {item.text}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-</file>
-
-<file path="Frontend/src/components/LifeWorkshop.jsx">
-export default function LifeWorkshop() {
-  const items = [
-    {
-      title: "Success Blockers",
-      desc: "How to remove the elements that are blocking you from achieving Extraordinary Success in your Career.",
-      icon: "/Images/success.png",
-    },
-    {
-      title: "Upgrade your Emotional Intelligence",
-      desc: "How to process and heal the emotions without pain in your professional and personal life.",
-      icon: "/Images/eint.png",
-    },
-    {
-      title: "Shifting Energy Patterns",
-      desc: "How to vibrate at a Higher Frequency and Attract happiness into your life easily.",
-      icon: "/Images/energy1.png",
-    },
-    {
-      title: "Wealth Creation",
-      desc: "How to create an Abundance Mindset that helps you create massive wealth and Success.",
-      icon: "/Images/mind.png",
-    },
-    {
-      title: "Remedies On Mental Plain",
-      desc: "How to perform strong remedies on mental plain and get the benefits in real life.",
-      icon: "/Images/as.png",
-    },
-  ];
-
-  return (
-    <section className="bg-white py-10">
-      <div className="max-w-7xl mx-auto px-4 relative">
-        {/* Heading */}
-        <h2 className="text-center text-4xl font-semibold mb-6">
-          What You Will Learn In The{" "}
-          <span className="text-orange-500">One Day Healing Master Class</span>
-        </h2>
-
-        {/* Subheading */}
-        <p className="text-center text-xl text-gray-800 m-8">
-          Everything in the workshop is backed by Universe
-        </p>
-
-        {/* Cards */}
-        <div className="grid md:grid-cols-2 gap-8">
-          {items.map((item, index) => (
-            <div
-              key={index}
-              className="bg-gray-100 rounded-2xl p-8 flex gap-6 items-start"
-            >
-              {/* Icon */}
-              <div className="bg-white rounded-xl  min-w-20 min-h-20 flex items-center justify-center">
-                <img
-                  src={item.icon}
-                  alt={item.title}
-                  className="w-full h-full object-contain"
-                />
-              </div>
-
-              {/* Content */}
-              <div>
-                <h3 className="text-2xl font-semibold text-gray-900 mb-3">
-                  {item.title}
-                </h3>
-                <p className="text-gray-700 leading-relaxed text-lg">
-                  {item.desc}
-                </p>
-              </div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-</file>
-
 <file path="Frontend/src/components/Personal.jsx">
 import React from "react";
 
@@ -1448,77 +1287,6 @@ export default function Personal() {
         </div>
       </div>
     </section>
-  );
-}
-</file>
-
-<file path="Frontend/src/components/StickyOffer.jsx">
-import React, { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
-export default function StickyOffer() {
-  const [showBar, setShowBar] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(300); // 10 minutes
-
-  const navigate = useNavigate();
-
-  // Show bar after scroll
-  useEffect(() => {
-    const handleScroll = () => {
-      if (window.scrollY > 10) {
-        setShowBar(true);
-      } else {
-        setShowBar(false);
-      }
-    };
-
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
-
-  // Countdown Timer
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0));
-    }, 1000);
-
-    return () => clearInterval(interval);
-  }, []);
-
-  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
-  const seconds = String(timeLeft % 60).padStart(2, "0");
-
-  return (
-    <div
-      className={`fixed bottom-0 left-0 w-full z-50 transition-transform duration-500
-      ${showBar ? "translate-y-0" : "translate-y-full"}`}
-    >
-      <div className="bg-white border-t-6 border-orange-500 rounded-t-2xl px-6 py-4">
-        <div className="max-w-6xl mx-auto flex flex-row items-center justify-between gap-4">
-          {/* Price Info */}
-          <div className="text-left">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl font-bold text-orange-500">₹149</span>
-              <span className="line-through font-semibold text-gray-400 text-lg">
-                ₹1499
-              </span>
-            </div>
-
-            <p className="text-gray-600 text-sm font-bold">
-              Offer Expires in{" "}
-              <span className="font-bold">
-                {minutes} : {seconds}
-              </span>
-            </p>
-          </div>
-          <button
-            className="bg-orange-500 hover:bg-orange-600 transition text-white px-5 sm:px-8 py-3 rounded-xl text-base sm:text-lg font-semibold shadow-md"
-            onClick={() => navigate("/booking")}
-          >
-            Book My Healing Session
-          </button>
-        </div>
-      </div>
-    </div>
   );
 }
 </file>
@@ -1727,134 +1495,6 @@ const TestimonialSection = () => {
 export default TestimonialSection;
 </file>
 
-<file path="Frontend/src/components/Transform.jsx">
-export default function Transform() {
-  return (
-    <section className="bg-white py-10">
-      <div className="max-w-6xl mx-auto px-4 text-center">
-        {/* Heading */}
-        <h2 className="text-4xl font-semibold mb-4">
-          Transform all areas of your life
-        </h2>
-
-        <div className="w-16 h-1 bg-orange-500 mx-auto mb-16"></div>
-
-        {/* Wheel */}
-        <div className="relative w-[360px] h-[360px] mx-auto rounded-full shadow-md">
-          {/* Quadrants */}
-          <div className="absolute top-0 right-0 w-1/2 h-1/2 bg-orange-500 rounded-tr-full flex flex-col items-center justify-center text-white">
-            <span className="text-5xl font-bold">01</span>
-            <span>WEALTH</span>
-          </div>
-
-          <div className="absolute bottom-0 right-0 w-1/2 h-1/2 bg-rose-600 rounded-br-full flex flex-col items-center justify-center text-white">
-            <span className="text-5xl font-bold">02</span>
-            <span>CAREER</span>
-          </div>
-
-          <div className="absolute bottom-0 left-0 w-1/2 h-1/2 bg-slate-700 rounded-bl-full flex flex-col items-center justify-center text-white">
-            <span className="text-5xl font-bold">03</span>
-            <span>Relationship</span>
-          </div>
-
-          <div className="absolute top-0 left-0 w-1/2 h-1/2 bg-teal-500 rounded-tl-full flex flex-col items-center justify-center text-white">
-            <span className="text-5xl font-bold">04</span>
-            <span>HEALTH</span>
-          </div>
-
-          {/* Center Ring */}
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-36 h-36 rounded-full bg-white flex items-center justify-center">
-              {/* Outer ring */}
-              <div className="w-28 h-28 rounded-full border-4 border-orange-500 flex items-center justify-center">
-                {/* Brain Image */}
-                <img
-                  src="/Images/you.png" // 🔥 replace with your actual image path
-                  alt="Brain"
-                  className="w-25 h-20 object-contain"
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-</file>
-
-<file path="Frontend/src/components/WorkShop.jsx">
-export default function WorkShop() {
-  return (
-    <section className="bg-white pb-10">
-      <div className="max-w-7xl mx-auto px-4 relative">
-        {/* Top Heading */}
-        <h1 className="text-center text-4xl md:text-5xl font-semibold mb-6">
-          Everything you need to achieve{" "}
-          <span className="text-orange-500">success</span>…{" "}
-          <span className="text-orange-500">is inside this workshop!</span>
-        </h1>
-
-        {/* Main Content */}
-        <div className="grid md:grid-cols-2 gap-12 items-start mt-20">
-          {/* Left Card */}
-          <div className="bg-gray-100 rounded-2xl p-10">
-            <h2 className="text-3xl font-semibold text-gray-800 mb-4">
-              Limited Seats To Maintain Healing Quality
-            </h2>
-
-            <p className="text-gray-600 text-lg mb-6">
-              You will never need another person to relax and calm you after
-              this session!
-            </p>
-
-            <div className="flex items-center gap-3 mb-8">
-              <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full border-2 border-orange-500 text-orange-500">
-                ✓
-              </span>
-              <p className="text-gray-700 text-lg">
-                <span className="font-semibold">1000+</span> people have already
-                registered.
-              </p>
-            </div>
-
-            <button className="max-w-full bg-orange-500 hover:bg-orange-600 text-white rounded-xl py-4 px-4 text-xl font-semibold transition">
-              SIGN UP NOW FOR NEW BONUS
-              <div className="text-sm font-normal mt-1">Limited Seats Left</div>
-            </button>
-          </div>
-
-          {/* Right Content */}
-          <div>
-            <h3 className="text-3xl font-semibold text-gray-800 mb-8">
-              What you will learn:
-            </h3>
-
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {[
-                "Removal of Success Blockers",
-                "Shifting Energy Patterns",
-                "Activation of Parasympathetic Nervous System",
-                "Rewire Your Subconscious Mind",
-                "Upgrade your Emotional Intelligence",
-                "Process emotions without pain",
-              ].map((item, index) => (
-                <div key={index} className="flex items-start gap-4">
-                  <span className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-full bg-orange-500 text-white text-sm font-bold">
-                    ✓
-                  </span>
-                  <p className="text-gray-700 text-lg">{item}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-</file>
-
 <file path="Frontend/src/hooks/useAutoDateSync.js">
 import { useEffect, useRef } from "react";
 import { getTodayDate } from "../utils/dateUtils";
@@ -1898,6 +1538,20 @@ const useAutoDateSync = (setDateState) => {
 };
 
 export default useAutoDateSync;
+</file>
+
+<file path="Frontend/src/socket/socket.js">
+import { io } from "socket.io-client";
+
+// Dynamically connect to the backend URL defined in .env
+// Fallback to 5001 for local development
+const URL = import.meta.env.VITE_API_URL || "http://localhost:5001";
+
+const socket = io(URL, {
+  withCredentials: true,
+});
+
+export default socket;
 </file>
 
 <file path="Frontend/src/utils/dateUtils.js">
@@ -1952,6 +1606,916 @@ import App from "./App.jsx";
 createRoot(document.getElementById("root")).render(<App />);
 </file>
 
+<file path="Frontend/index.html">
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;0,800;1,400;1,600&display=swap"
+      rel="stylesheet"
+    />
+
+    <title>Divine Vikas - Healing Master Class</title>
+  </head>
+  <body class="antialiased font-sans bg-slate-50 text-slate-800">
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
+</file>
+
+<file path="Frontend/src/components/booking/Seat.jsx">
+const Seat = ({ seat, isSelected, onSeatSelect }) => {
+  const disabled = seat.booked || seat.locked;
+
+  const handleClick = (e) => {
+    e.stopPropagation();
+    if (!disabled) {
+      onSeatSelect(seat.number);
+    }
+  };
+
+  let className =
+    "w-full h-full flex items-center justify-center text-xs md:text-sm font-semibold rounded-full border transition-all duration-300";
+
+  if (seat.booked) {
+    // Booked/Ghost State
+    className +=
+      " bg-slate-200 text-slate-400 border-slate-300 cursor-not-allowed seat-taken";
+  } else if (seat.locked) {
+    // Locked (Someone else clicked it) State
+    className +=
+      " bg-amber-100 text-amber-500 border-amber-300 cursor-not-allowed";
+  } else if (isSelected) {
+    // The "Ignited" State
+    className +=
+      " bg-gradient-to-br from-green-400 to-emerald-600 text-white border-transparent seat-selected";
+  } else {
+    // The "Breathing" Available State
+    className +=
+      " bg-white text-slate-600 border-emerald-200 hover:border-emerald-500 hover:text-emerald-700 cursor-pointer seat-available shadow-sm";
+  }
+
+  return (
+    <button disabled={disabled} onClick={handleClick} className={className}>
+      {seat.number}
+    </button>
+  );
+};
+
+export default Seat;
+</file>
+
+<file path="Frontend/src/components/Hero.jsx">
+import { useEffect, useState, useMemo } from "react";
+import { motion } from "framer-motion";
+import Particles, { initParticlesEngine } from "@tsparticles/react";
+import { loadSlim } from "@tsparticles/slim";
+import { Users } from "lucide-react";
+import EnergyCore from "./EnergyCore";
+
+export default function Hero() {
+  const [timeLeft, setTimeLeft] = useState(300);
+  const [init, setInit] = useState(false);
+  const [liveSouls, setLiveSouls] = useState(42);
+
+  // Initialize Particle Engine for the background
+  useEffect(() => {
+    initParticlesEngine(async (engine) => {
+      await loadSlim(engine);
+    }).then(() => {
+      setInit(true);
+    });
+  }, []);
+
+  // Countdown Timer
+  useEffect(() => {
+    if (timeLeft <= 0) return;
+    const interval = setInterval(() => setTimeLeft((prev) => prev - 1), 1000);
+    return () => clearInterval(interval);
+  }, [timeLeft]);
+
+  // Simulate live presence shifting naturally
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setLiveSouls((prev) => {
+        const shift = Math.random() > 0.5 ? 1 : -1;
+        return Math.max(30, Math.min(80, prev + shift));
+      });
+    }, 4500);
+    return () => clearInterval(interval);
+  }, []);
+
+  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
+  const seconds = String(timeLeft % 60).padStart(2, "0");
+
+  // Framer Motion Variants for Staggered Reveals
+  const listContainer = {
+    hidden: { opacity: 0 },
+    show: {
+      opacity: 1,
+      transition: { staggerChildren: 0.15 },
+    },
+  };
+
+  const listItem = {
+    hidden: { opacity: 0, x: -20 },
+    show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 100 } },
+  };
+
+  const particleOptions = useMemo(
+    () => ({
+      background: { color: { value: "transparent" } },
+      fpsLimit: 60,
+      interactivity: {
+        events: {
+          onHover: { enable: true, mode: "repulse" },
+        },
+        modes: { repulse: { distance: 100, duration: 0.4 } },
+      },
+      particles: {
+        color: { value: ["#f97316", "#14b8a6", "#a855f7"] },
+        links: {
+          enable: true,
+          color: "#cbd5e1",
+          distance: 150,
+          opacity: 0.2,
+          width: 1,
+        },
+        move: {
+          enable: true,
+          direction: "none",
+          random: true,
+          speed: 0.6,
+          straight: false,
+        },
+        number: { density: { enable: true, area: 800 }, value: 40 },
+        opacity: { value: 0.3 },
+        shape: { type: "circle" },
+        size: { value: { min: 1, max: 3 } },
+      },
+      detectRetina: true,
+    }),
+    [],
+  );
+
+  return (
+    <section className="relative w-full overflow-hidden bg-gradient-to-br from-slate-50 to-orange-50/30">
+      {/* Background Particles */}
+      {init && (
+        <div className="absolute inset-0 z-0 opacity-60">
+          <Particles id="tsparticles" options={particleOptions} />
+        </div>
+      )}
+
+      {/* Social Proof Pulse Indicator */}
+      <motion.div
+        initial={{ y: -100, opacity: 0 }}
+        animate={{ y: 0, opacity: 1 }}
+        transition={{ delay: 1, type: "spring" }}
+        className="fixed top-6 right-6 z-50 flex items-center gap-3 rounded-full bg-white/60 backdrop-blur-md px-4 py-2 shadow-lg border border-white/40"
+      >
+        <div className="relative flex h-3 w-3">
+          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-orange-400 opacity-75"></span>
+          <span className="relative inline-flex rounded-full h-3 w-3 bg-orange-500"></span>
+        </div>
+        <span className="text-sm font-semibold text-gray-800 flex items-center gap-1">
+          <Users size={16} className="text-orange-500" />
+          {liveSouls} souls are healing with you
+        </span>
+      </motion.div>
+
+      {/* ================= HERO TOP BANNER ================= */}
+      <div className="relative z-10 bg-orange-500/90 backdrop-blur-sm text-white text-center rounded-b-3xl px-4 py-5 mx-4 md:mx-10 shadow-lg border border-orange-400/50">
+        <h1 className="text-[16px] leading-tight font-serif font-bold md:text-4xl md:leading-snug max-w-3xl mx-auto">
+          One Day Whole Body Healing Master Class
+        </h1>
+        <p className="mt-2 text-[14px] md:text-lg max-w-2xl mx-auto font-light tracking-wide">
+          Heal Deeply | Transform Gently | Learn Easily
+        </p>
+      </div>
+
+      {/* ================= MAIN CONTENT ================= */}
+      <div className="relative z-10 px-4 py-16 space-y-20">
+        {/* ===== Heading Section ===== */}
+        <motion.div
+          initial={{ opacity: 0, y: 30 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.8 }}
+          className="max-w-4xl mx-auto text-center"
+        >
+          <p className="text-sm md:text-base text-gray-600 font-medium tracking-widest uppercase">
+            Feeling Stuck, Drained or overwhelmed?
+          </p>
+          <h2 className="mt-6 text-2xl md:text-5xl font-serif font-extrabold text-slate-900 leading-tight">
+            Experience the Holistic Method of Healing{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-rose-500">
+              That Restores The Mind, Body & Energy.
+            </span>
+          </h2>
+          <p className="mt-6 text-gray-600 text-sm md:text-lg font-light">
+            Using the energy of <strong>Cosmos,</strong>{" "}
+            <strong>You and Me.</strong>
+          </p>
+        </motion.div>
+
+        {/* ===== 3D Core + Benefits Section ===== */}
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="rounded-3xl overflow-hidden w-full h-[400px] md:h-[500px] shadow-2xl relative border border-slate-700/50 flex items-center justify-center bg-slate-950"
+          >
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.2)_0%,transparent_70%)] pointer-events-none z-0"></div>
+
+            <EnergyCore />
+          </motion.div>
+
+          {/* Benefits List */}
+          <div className="bg-white/40 backdrop-blur-xl border border-white/50 p-6 md:p-10 rounded-3xl shadow-xl">
+            <h3 className="text-2xl font-serif font-bold text-slate-900 mb-8">
+              What You Will Experience
+            </h3>
+
+            <motion.ul
+              variants={listContainer}
+              initial="hidden"
+              whileInView="show"
+              viewport={{ once: true }}
+              className="space-y-5"
+            >
+              {[
+                "Understanding whole body healing and energy alignment",
+                "Guided healing session for emotional heaviness & fatigue",
+                "Activation of self-healing awareness",
+                "Techniques to calm the nervous system",
+                "Feeling of lightness, clarity, and inner stability",
+              ].map((text, index) => (
+                <motion.li
+                  key={index}
+                  variants={listItem}
+                  className="flex items-start gap-4 bg-white/60 p-4 rounded-2xl border border-white/50 shadow-sm"
+                >
+                  <span className="bg-gradient-to-br from-orange-400 to-rose-500 text-white w-8 h-8 flex items-center justify-center rounded-full font-bold flex-shrink-0 shadow-md">
+                    ✓
+                  </span>
+                  <p className="text-slate-800 text-sm md:text-base font-medium pt-1">
+                    {text}
+                  </p>
+                </motion.li>
+              ))}
+            </motion.ul>
+          </div>
+        </div>
+
+        {/* ===== Profile + CTA Section ===== */}
+        <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
+          <motion.div
+            initial={{ opacity: 0, x: -30 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="space-y-6"
+          >
+            <div className="bg-white/50 backdrop-blur-lg border border-white/60 rounded-3xl p-6 flex gap-6 items-center shadow-lg">
+              <img
+                src="/Images/myphoto.png"
+                alt="Dr. Vikas Chauhan"
+                className="w-24 h-24 rounded-full border-4 border-orange-400 object-cover flex-shrink-0 shadow-inner"
+              />
+              <div>
+                <p className="text-sm text-gray-500 font-medium tracking-wide uppercase">
+                  Your Guide
+                </p>
+                <h3 className="text-xl md:text-2xl font-serif font-bold text-slate-900">
+                  VIKAS CHAUHAN
+                </h3>
+                <p className="text-orange-600 font-medium text-sm mt-1">
+                  Guided Meditation Expert • Akashic Reader
+                </p>
+              </div>
+            </div>
+          </motion.div>
+
+          {/* Right CTA */}
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            whileInView={{ opacity: 1, scale: 1 }}
+            viewport={{ once: true }}
+            className="text-center space-y-6 bg-white/50 backdrop-blur-lg border border-white/60 p-8 rounded-3xl shadow-xl"
+          >
+            <motion.button
+              whileHover={{ scale: 1.03 }}
+              whileTap={{ scale: 0.97 }}
+              className="w-full bg-gradient-to-r from-orange-500 to-rose-500 text-white py-5 rounded-2xl text-xl font-bold shadow-lg shadow-orange-500/30 border border-orange-400/50"
+              onClick={() => (window.location.href = "/booking")} // ✅ FIXED
+            >
+              SECURE YOUR SPOT
+            </motion.button>
+
+            <div className="flex justify-center gap-6 pt-4">
+              <div className="bg-white/80 rounded-2xl px-6 py-4 w-28 shadow-sm border border-slate-100">
+                <p className="text-3xl font-bold text-slate-800">{minutes}</p>
+                <p className="text-xs text-gray-500 mt-1 font-semibold">
+                  MINUTES
+                </p>
+              </div>
+              <div className="bg-white/80 rounded-2xl px-6 py-4 w-28 shadow-sm border border-slate-100">
+                <p className="text-3xl font-bold text-slate-800">{seconds}</p>
+                <p className="text-xs text-gray-500 mt-1 font-semibold">
+                  SECONDS
+                </p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/LifeSection.jsx">
+import { motion } from "framer-motion";
+import { CheckCircle2 } from "lucide-react";
+
+export default function LifeSection() {
+  const items = [
+    "Feel emotionally stuck, drained, or overwhelmed",
+    "Are dealing with stress, anxiety, or unresolved emotions",
+    "Want natural, healing support",
+    "Are curious about energy healing but unsure where to start",
+    "Want to experience healing before committing fully",
+    "Are ready to perform remedies on mental plain due to lack of time",
+  ];
+
+  const container = {
+    hidden: { opacity: 0 },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } },
+  };
+
+  const itemAnim = {
+    hidden: { opacity: 0, y: 20 },
+    show: { opacity: 1, y: 0, transition: { type: "spring", stiffness: 120 } },
+  };
+
+  return (
+    <section className="w-full py-20 px-6 relative z-10">
+      <div className="max-w-4xl mx-auto">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-12"
+        >
+          <h2 className="text-3xl md:text-5xl font-serif font-bold text-slate-900">
+            Who Is{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-rose-500">
+              This
+            </span>{" "}
+            For?
+          </h2>
+          <div className="w-20 h-1.5 bg-gradient-to-r from-orange-400 to-rose-500 mx-auto mt-6 rounded-full" />
+        </motion.div>
+
+        <motion.div
+          variants={container}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          className="glass-panel rounded-3xl p-6 md:p-12 space-y-5"
+        >
+          {items.map((text, index) => (
+            <motion.div
+              key={index}
+              variants={itemAnim}
+              whileHover={{ scale: 1.02 }}
+              className="flex items-center gap-5 bg-white/60 hover:bg-white/80 transition-colors rounded-2xl p-5 border border-white/50 shadow-sm"
+            >
+              <CheckCircle2 className="text-orange-500 w-8 h-8 flex-shrink-0" />
+              <p className="text-slate-800 text-lg md:text-xl font-medium">
+                {text}
+              </p>
+            </motion.div>
+          ))}
+        </motion.div>
+      </div>
+    </section>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/LifeWorkshop.jsx">
+import { useRef } from "react";
+import { motion, useScroll, useSpring } from "framer-motion";
+
+export default function LifeWorkshop() {
+  const items = [
+    {
+      title: "Success Blockers",
+      desc: "Remove the elements blocking you from achieving Extraordinary Success in your Career.",
+      icon: "/Images/success.png",
+    },
+    {
+      title: "Emotional Intelligence",
+      desc: "Process and heal emotions without pain in your professional and personal life.",
+      icon: "/Images/eint.png",
+    },
+    {
+      title: "Shifting Energy",
+      desc: "Vibrate at a Higher Frequency and Attract happiness into your life easily.",
+      icon: "/Images/energy1.png",
+    },
+    {
+      title: "Wealth Creation",
+      desc: "Create an Abundance Mindset that helps you create massive wealth and Success.",
+      icon: "/Images/mind.png",
+    },
+    {
+      title: "Mental Plain Remedies",
+      desc: "Perform strong remedies on the mental plain and get benefits in real life.",
+      icon: "/Images/as.png",
+    },
+  ];
+
+  // Engine for the Scroll-Linked SVG Animation
+  const sectionRef = useRef(null);
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start center", "end center"],
+  });
+
+  // Spring physics makes the line drawing feel fluid rather than robotic
+  const drawLength = useSpring(scrollYProgress, { stiffness: 90, damping: 20 });
+
+  return (
+    <section ref={sectionRef} className="py-24 relative z-10 overflow-hidden">
+      <div className="max-w-7xl mx-auto px-4 relative">
+        {/* Animated Heading */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-center mb-24"
+        >
+          <h2 className="text-4xl md:text-5xl font-serif font-bold text-slate-900 mb-6">
+            What You Will Learn In The{" "}
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-rose-500">
+              Master Class
+            </span>
+          </h2>
+          <p className="text-xl text-slate-600 font-light font-sans tracking-wide">
+            Everything in the workshop is backed by the Universe.
+          </p>
+        </motion.div>
+
+        {/* The Timeline Container */}
+        <div className="relative max-w-4xl mx-auto">
+          {/* ================= THE SVG DRAWING ENGINE ================= */}
+          <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-2 md:-ml-1 z-0">
+            {/* Background static line (faint) */}
+            <svg
+              className="absolute w-full h-full"
+              preserveAspectRatio="none"
+              viewBox="0 0 10 100"
+            >
+              <line
+                x1="5"
+                y1="0"
+                x2="5"
+                y2="100"
+                stroke="#cbd5e1"
+                strokeWidth="2"
+                strokeDasharray="4 4"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+
+            {/* Animated foreground line (glowing orange) */}
+            <svg
+              className="absolute w-full h-full"
+              preserveAspectRatio="none"
+              viewBox="0 0 10 100"
+            >
+              <motion.line
+                x1="5"
+                y1="0"
+                x2="5"
+                y2="100"
+                stroke="url(#gradient-line)"
+                strokeWidth="4"
+                strokeLinecap="round"
+                style={{ pathLength: drawLength }}
+                vectorEffect="non-scaling-stroke"
+                className="drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]"
+              />
+              <defs>
+                <linearGradient id="gradient-line" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#f97316" />
+                  <stop offset="100%" stopColor="#e11d48" />
+                </linearGradient>
+              </defs>
+            </svg>
+          </div>
+
+          {/* Timeline Nodes */}
+          <div className="space-y-16 md:space-y-24">
+            {items.map((item, index) => {
+              const isEven = index % 2 === 0;
+              return (
+                <div
+                  key={index}
+                  className={`relative flex items-center md:justify-between flex-col md:flex-row ${isEven ? "md:flex-row-reverse" : ""}`}
+                >
+                  {/* Glowing Node on the line */}
+                  <motion.div
+                    initial={{ scale: 0, opacity: 0 }}
+                    whileInView={{ scale: 1, opacity: 1 }}
+                    transition={{ delay: 0.2, type: "spring" }}
+                    viewport={{ once: true, margin: "-100px" }}
+                    className="absolute left-8 md:left-1/2 w-6 h-6 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 shadow-[0_0_15px_rgba(249,115,22,0.6)] transform -translate-x-1/2 z-10 border-4 border-white"
+                  ></motion.div>
+
+                  {/* Empty space for alternating layout */}
+                  <div className="hidden md:block w-[45%]"></div>
+
+                  {/* Glass Content Card */}
+                  <motion.div
+                    initial={{ opacity: 0, x: isEven ? 50 : -50 }}
+                    whileInView={{ opacity: 1, x: 0 }}
+                    viewport={{ once: true, margin: "-50px" }}
+                    transition={{ type: "spring", stiffness: 80, damping: 20 }}
+                    className="w-full pl-20 md:pl-0 md:w-[45%] group"
+                  >
+                    <div className="glass-panel rounded-3xl p-8 hover:bg-white/60 transition-colors duration-300 relative overflow-hidden">
+                      {/* Decorative SVG flourish drawing inside the card */}
+                      <svg
+                        className="absolute top-0 right-0 w-32 h-32 opacity-10 pointer-events-none"
+                        viewBox="0 0 100 100"
+                      >
+                        <motion.path
+                          initial={{ pathLength: 0 }}
+                          whileInView={{ pathLength: 1 }}
+                          transition={{ duration: 1.5, delay: 0.3 }}
+                          viewport={{ once: true }}
+                          d="M 10 90 Q 50 10 90 90"
+                          fill="transparent"
+                          stroke="#f97316"
+                          strokeWidth="2"
+                        />
+                      </svg>
+
+                      <div className="bg-white/90 rounded-2xl w-20 h-20 p-4 mb-6 shadow-sm border border-orange-100 group-hover:scale-110 transition-transform duration-500">
+                        <img
+                          src={item.icon}
+                          alt={item.title}
+                          className="w-full h-full object-contain"
+                        />
+                      </div>
+
+                      <h3 className="text-2xl font-serif font-bold text-slate-900 mb-3 group-hover:text-orange-600 transition-colors">
+                        {item.title}
+                      </h3>
+
+                      <p className="text-slate-600 leading-relaxed font-sans text-lg">
+                        {item.desc}
+                      </p>
+                    </div>
+                  </motion.div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/StickyOffer.jsx">
+import { useEffect, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Timer } from "lucide-react";
+
+export default function StickyOffer() {
+  const [showBar, setShowBar] = useState(false);
+  const [timeLeft, setTimeLeft] = useState(300);
+
+  // Show bar automatically after 3 seconds of being on the page
+  useEffect(() => {
+    const timer = setTimeout(() => setShowBar(true), 3000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
+    const interval = setInterval(
+      () => setTimeLeft((prev) => (prev > 0 ? prev - 1 : 0)),
+      1000,
+    );
+    return () => clearInterval(interval);
+  }, []);
+
+  const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
+  const seconds = String(timeLeft % 60).padStart(2, "0");
+
+  return (
+    <AnimatePresence>
+      {showBar && (
+        <motion.div
+          initial={{ y: 100, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          exit={{ y: 100, opacity: 0 }}
+          className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
+        >
+          <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 flex flex-col md:flex-row items-center gap-4 md:gap-8 shadow-2xl border border-white/60 bg-white/70">
+            <div className="flex items-center gap-4">
+              <div className="flex flex-col items-end">
+                <span className="text-xs text-slate-500 font-bold uppercase tracking-wider line-through">
+                  ₹1499
+                </span>
+                <span className="text-2xl font-black text-orange-600 leading-none">
+                  ₹149
+                </span>
+              </div>
+              <div className="h-10 w-px bg-slate-300/50 hidden md:block"></div>
+              <div className="flex items-center gap-2 text-slate-700 bg-white/50 px-3 py-1.5 rounded-full border border-white/40">
+                <Timer size={16} className="text-orange-500 animate-pulse" />
+                <span className="font-bold text-sm">
+                  {minutes}:{seconds}
+                </span>
+              </div>
+            </div>
+
+            <button
+              onClick={() => (window.location.href = "/booking")} // ✅ FIXED
+              className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap"
+            >
+              Book Healing Session
+            </button>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/Transform.jsx">
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+
+const quadrants = [
+  {
+    id: 1,
+    label: "WEALTH",
+    color: "bg-orange-500",
+    text: "Align your energy to attract abundance without friction.",
+  },
+  {
+    id: 2,
+    label: "CAREER",
+    color: "bg-rose-600",
+    text: "Clear subconscious blocks halting your professional growth.",
+  },
+  {
+    id: 3,
+    label: "RELATIONS",
+    color: "bg-slate-700",
+    text: "Heal past wounds to foster deep, meaningful connections.",
+  },
+  {
+    id: 4,
+    label: "HEALTH",
+    color: "bg-teal-500",
+    text: "Release stored trauma and restore physiological balance.",
+  },
+];
+
+export default function Transform() {
+  const [hoveredIndex, setHoveredIndex] = useState(null);
+  const [selectedInsight, setSelectedInsight] = useState(null);
+
+  return (
+    <section className="bg-slate-50 py-20 relative overflow-hidden">
+      <div className="max-w-6xl mx-auto px-4 text-center relative z-10">
+        <motion.h2
+          initial={{ opacity: 0, y: 20 }}
+          whileInView={{ opacity: 1, y: 0 }}
+          viewport={{ once: true }}
+          className="text-4xl md:text-5xl font-serif font-bold text-slate-900 mb-6"
+        >
+          Transform Every Pillar of Your Life
+        </motion.h2>
+
+        <div className="w-20 h-1.5 bg-gradient-to-r from-orange-400 to-rose-500 mx-auto mb-20 rounded-full"></div>
+
+        {/* Interactive Mandala Wheel */}
+        <div className="relative w-[340px] h-[340px] md:w-[450px] md:h-[450px] mx-auto group">
+          {/* Base Glow */}
+          <div className="absolute inset-0 bg-orange-400/20 rounded-full blur-3xl scale-110 -z-10 transition-all duration-700 group-hover:bg-rose-500/30"></div>
+
+          {quadrants.map((q, i) => {
+            const isHovered = hoveredIndex === i;
+            const isDimmed = hoveredIndex !== null && hoveredIndex !== i;
+
+            // Positioning for 4 corners mapping to a circle
+            const positions = [
+              "top-0 right-0 rounded-tr-full",
+              "bottom-0 right-0 rounded-br-full",
+              "bottom-0 left-0 rounded-bl-full",
+              "top-0 left-0 rounded-tl-full",
+            ];
+
+            return (
+              <motion.div
+                key={q.id}
+                onMouseEnter={() => setHoveredIndex(i)}
+                onMouseLeave={() => setHoveredIndex(null)}
+                onClick={() => setSelectedInsight(q)}
+                animate={{
+                  opacity: isDimmed ? 0.4 : 1,
+                  scale: isHovered ? 1.05 : 1,
+                }}
+                className={`absolute w-[49%] h-[49%] cursor-pointer ${q.color} ${positions[i]} flex flex-col items-center justify-center text-white shadow-lg border border-white/20 transition-all duration-300 z-10`}
+              >
+                <span className="text-3xl md:text-5xl font-black opacity-30">
+                  0{q.id}
+                </span>
+                <span className="font-bold tracking-widest text-sm md:text-base mt-2">
+                  {q.label}
+                </span>
+              </motion.div>
+            );
+          })}
+
+          {/* Center Core */}
+          <div className="absolute inset-0 flex items-center justify-center z-20 pointer-events-none">
+            <motion.div
+              animate={{
+                scale: hoveredIndex !== null ? 1.1 : 1,
+                boxShadow:
+                  hoveredIndex !== null
+                    ? "0 0 40px rgba(249, 115, 22, 0.6)"
+                    : "0 0 20px rgba(0,0,0,0.1)",
+              }}
+              className="w-36 h-36 md:w-48 md:h-48 rounded-full bg-white flex items-center justify-center border-4 border-slate-50 transition-all duration-500"
+            >
+              <div className="w-28 h-28 md:w-40 md:h-40 rounded-full border border-dashed border-slate-300 flex items-center justify-center relative overflow-hidden">
+                <img
+                  src="/Images/you.png"
+                  alt="You"
+                  className={`w-20 h-20 md:w-24 md:h-24 object-contain transition-transform duration-700 ${hoveredIndex !== null ? "scale-110 drop-shadow-lg" : ""}`}
+                />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </div>
+
+      {/* Insight Modal (Popup) */}
+      <AnimatePresence>
+        {selectedInsight && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setSelectedInsight(null)}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-3xl p-8 max-w-sm w-full shadow-2xl relative border border-slate-100"
+            >
+              <button
+                onClick={() => setSelectedInsight(null)}
+                className="absolute top-4 right-4 text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+              <div
+                className={`w-12 h-12 rounded-full ${selectedInsight.color} mb-6 flex items-center justify-center text-white font-bold text-xl`}
+              >
+                0{selectedInsight.id}
+              </div>
+              <h3 className="text-2xl font-serif font-bold text-slate-900 mb-3">
+                {selectedInsight.label}
+              </h3>
+              <p className="text-slate-600 leading-relaxed">
+                {selectedInsight.text}
+              </p>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </section>
+  );
+}
+</file>
+
+<file path="Frontend/src/components/WorkShop.jsx">
+import { motion } from "framer-motion";
+import { Sparkles, ArrowRight } from "lucide-react";
+
+export default function WorkShop() {
+  return (
+    <section className="py-20 relative z-10">
+      <div className="max-w-7xl mx-auto px-4">
+        <motion.h1
+          initial={{ opacity: 0, scale: 0.95 }}
+          whileInView={{ opacity: 1, scale: 1 }}
+          viewport={{ once: true }}
+          className="text-center text-4xl md:text-6xl font-serif font-bold mb-20 text-slate-900 leading-tight"
+        >
+          Everything you need to achieve{" "}
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-orange-500 to-rose-500">
+            success
+          </span>{" "}
+          <br />
+          is inside this workshop.
+        </motion.h1>
+
+        <div className="grid md:grid-cols-2 gap-12 items-center">
+          {/* Left Glass Card */}
+          <motion.div
+            initial={{ opacity: 0, x: -40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+            className="glass-panel rounded-3xl p-10 md:p-12 border border-white/60 relative overflow-hidden"
+          >
+            <div className="absolute top-0 right-0 w-40 h-40 bg-orange-400/20 rounded-full blur-3xl"></div>
+
+            <h2 className="text-3xl font-serif font-bold text-slate-900 mb-6 relative z-10">
+              Limited Seats To Maintain Healing Quality
+            </h2>
+            <p className="text-slate-600 text-lg mb-8 relative z-10">
+              You will never need another person to relax and calm you after
+              this session!
+            </p>
+
+            <div className="flex items-center gap-4 mb-10 bg-white/50 p-4 rounded-2xl border border-white/40">
+              <Sparkles className="text-orange-500 w-8 h-8" />
+              <p className="text-slate-800 text-lg">
+                <strong className="text-orange-600 text-xl">1000+</strong> souls
+                have already registered.
+              </p>
+            </div>
+
+            <button
+              onClick={() => (window.location.href = "/booking")} // ✅ FIXED
+              className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-2xl py-5 px-6 text-xl font-bold transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-3 group relative z-10"
+            >
+              SECURE YOUR SEAT
+              <ArrowRight className="group-hover:translate-x-1 transition-transform" />
+            </button>
+          </motion.div>
+
+          {/* Right Content */}
+          <motion.div
+            initial={{ opacity: 0, x: 40 }}
+            whileInView={{ opacity: 1, x: 0 }}
+            viewport={{ once: true }}
+          >
+            <h3 className="text-3xl font-serif font-bold text-slate-900 mb-10">
+              Your Journey Includes:
+            </h3>
+
+            <div className="space-y-6">
+              {[
+                "Removal of Success Blockers",
+                "Shifting Energy Patterns",
+                "Activation of Parasympathetic Nervous System",
+                "Rewire Your Subconscious Mind",
+                "Upgrade your Emotional Intelligence",
+              ].map((item, index) => (
+                <div
+                  key={index}
+                  className="flex items-center gap-5 glass-panel p-4 rounded-2xl"
+                >
+                  <span className="flex-shrink-0 w-10 h-10 flex items-center justify-center rounded-full bg-gradient-to-br from-orange-400 to-rose-500 text-white shadow-md">
+                    ✓
+                  </span>
+                  <p className="text-slate-800 text-lg font-medium">{item}</p>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </div>
+    </section>
+  );
+}
+</file>
+
 <file path="Frontend/package.json">
 {
   "name": "vikas",
@@ -1966,15 +2530,23 @@ createRoot(document.getElementById("root")).render(<App />);
   },
   "dependencies": {
     "@cashfreepayments/cashfree-js": "^1.0.6",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.5.0",
+    "@react-three/postprocessing": "^3.0.4",
     "@tailwindcss/vite": "^4.1.18",
+    "@tsparticles/react": "^3.0.0",
+    "@tsparticles/slim": "^3.9.1",
     "axios": "^1.13.5",
+    "framer-motion": "^12.35.0",
+    "lucide-react": "^0.577.0",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.13.0",
     "react-toastify": "^11.0.5",
     "socket.io-client": "^4.8.3",
     "swiper": "^12.1.0",
-    "tailwindcss": "^4.1.18"
+    "tailwindcss": "^4.1.18",
+    "three": "^0.183.2"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
@@ -2046,37 +2618,115 @@ export default router;
 <file path="Frontend/src/App.css">
 @import "tailwindcss";
 
+@theme {
+  --font-sans: "Inter", sans-serif;
+  --font-serif: "Playfair Display", serif;
+}
 
 .hide-scrollbar {
   -ms-overflow-style: none;
   scrollbar-width: none;
-
 }
 
 .hide-scrollbar::-webkit-scrollbar {
   display: none;
 }
-</file>
 
-<file path="Backend/routes/session.route.js">
-import express from "express";
-import {
-  createSession,
-  deleteSession,
-  getSessions,
-} from "../controllers/session.controller.js";
-import { protectAdmin } from "../middleware/auth.middleware.js"; // ✅ New
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
-const router = express.Router();
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
 
-// Public: Users need to see what's available
-router.get("/get-all-session", getSessions);
+@import "tailwindcss";
 
-// Protected: Only Admin can manage sessions
-router.post("/create-session", protectAdmin, createSession);
-router.delete("/delete-session/:id", protectAdmin, deleteSession);
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
 
-export default router;
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* ================== UX MICRO-INTERACTIONS ================== */
+
+/* Subtle breathing effect for available seats */
+@keyframes breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rgba(34, 197, 94, 0);
+  }
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 12px rgba(34, 197, 94, 0.4);
+  }
+}
+
+.seat-available {
+  animation: breathe 3s infinite ease-in-out;
+}
+
+/* Ignited glow for the selected seat */
+.seat-selected {
+  box-shadow: 0 0 20px 8px rgba(34, 197, 94, 0.5);
+  transform: scale(1.15);
+  z-index: 10;
+}
+
+/* Locked/Booked ghosting effect */
+.seat-taken {
+  opacity: 0.6;
+  filter: grayscale(100%);
+}
+
+/* ================== VISUAL ENGINE (PHASE 2) ================== */
+
+/* Slow-moving cosmic energy background */
+@keyframes mesh-gradient {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
+.bg-mesh {
+  /* Soft Oranges, Deep Purples, and Teal */
+  background: linear-gradient(-45deg, #fff7ed, #f3e8ff, #ccfbf1, #ffedd5);
+  background-size: 400% 400%;
+  animation: mesh-gradient 15s ease infinite;
+}
+
+/* Universal Glassmorphism Utility */
+.glass-panel {
+  background: rgba(255, 255, 255, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.6);
+  box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
+}
+
+/* ================== 3D OVERLAY OVERRIDES ================== */
+/* This strips the solid backgrounds off your sections so the 3D tunnel is visible */
+.holographic-overlay section {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Ensure the scroll container works smoothly on mobile */
+.holographic-overlay {
+  width: 100vw;
+  overflow-x: hidden;
+}
 </file>
 
 <file path="Backend/models/session.model.js">
@@ -2145,27 +2795,23 @@ sessionSchema.index({ "lockedSeats.lockedAt": 1 });
 export default mongoose.model("Session", sessionSchema);
 </file>
 
-<file path="Backend/routes/booking.route.js">
+<file path="Backend/routes/session.route.js">
 import express from "express";
 import {
-  lockSeat,
-  unlockSeat,
-  createBooking,
-  confirmBooking,
-  getAllBookings,
-} from "../controllers/booking.controller.js";
+  createSession,
+  deleteSession,
+  getSessions,
+} from "../controllers/session.controller.js";
 import { protectAdmin } from "../middleware/auth.middleware.js"; // ✅ New
 
 const router = express.Router();
 
-// Public Booking Flow
-router.post("/lock-seat", lockSeat);
-router.post("/unlock-seat", unlockSeat);
-router.post("/create-booking", createBooking);
-router.post("/confirm-booking", confirmBooking);
+// Public: Users need to see what's available
+router.get("/get-all-session", getSessions);
 
-// Protected: Admin-only dashboard data
-router.get("/get-all-bookings", protectAdmin, getAllBookings);
+// Protected: Only Admin can manage sessions
+router.post("/create-session", protectAdmin, createSession);
+router.delete("/delete-session/:id", protectAdmin, deleteSession);
 
 export default router;
 </file>
@@ -2282,126 +2928,29 @@ bookingSchema.index({ session: 1, seatNumber: 1 }, { unique: true });
 export default mongoose.model("Booking", bookingSchema);
 </file>
 
-<file path="Frontend/src/App.jsx">
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+<file path="Backend/routes/booking.route.js">
+import express from "express";
+import {
+  lockSeat,
+  unlockSeat,
+  createBooking,
+  confirmBooking,
+  getAllBookings,
+} from "../controllers/booking.controller.js";
+import { protectAdmin } from "../middleware/auth.middleware.js"; // ✅ New
 
-import Hero from "./components/Hero";
-import Testimonial from "./components/Testimonial";
-import FAQ from "./components/FAQ";
-import WorkShop from "./components/WorkShop";
-import TransForm from "./components/Transform";
-import LifeWorkshop from "./components/LifeWorkshop";
-import Personal from "./components/Personal";
-import LifeSection from "./components/LifeSection";
-import StickyOffer from "./components/StickyOffer";
-import Checkout from "./pages/Checkout";
+const router = express.Router();
 
-/* Booking System Pages */
-import BookingPage from "./pages/BookingPage";
-import AdminPage from "./pages/AdminPage";
-import AdminLogin from "./pages/AdminLogin"; // ✅ New Import
+// Public Booking Flow
+router.post("/lock-seat", lockSeat);
+router.post("/unlock-seat", unlockSeat);
+router.post("/create-booking", createBooking);
+router.post("/confirm-booking", confirmBooking);
 
-/* Toast */
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+// Protected: Admin-only dashboard data
+router.get("/get-all-bookings", protectAdmin, getAllBookings);
 
-import "./App.css";
-import PaymentSuccess from "./pages/PaymentSuccess";
-import PaymentFailed from "./pages/PaymentFailed";
-
-// ✅ Protected Route Wrapper: Checks for the token before rendering the AdminPage
-const ProtectedAdminRoute = ({ children }) => {
-  const token = localStorage.getItem("adminToken");
-  return token ? children : <Navigate to="/admin-login" replace />;
-};
-
-export default function App() {
-  return (
-    <>
-      <ToastContainer position="top-right" autoClose={1500} />
-
-      <BrowserRouter>
-        <Routes>
-          {/* Main Landing Page */}
-          <Route
-            path="/"
-            element={
-              <>
-                <Hero />
-                <LifeSection />
-                <TransForm />
-                <LifeWorkshop />
-                <Personal />
-                <WorkShop />
-                <Testimonial />
-                <FAQ />
-                <StickyOffer />
-              </>
-            }
-          />
-
-          {/* Booking System Routes */}
-          <Route path="/booking" element={<BookingPage />} />
-
-          {/* ✅ Secured Admin Routes */}
-          <Route path="/admin-login" element={<AdminLogin />} />
-          <Route
-            path="/admin"
-            element={
-              <ProtectedAdminRoute>
-                <AdminPage />
-              </ProtectedAdminRoute>
-            }
-          />
-
-          {/* Payment Routes */}
-          <Route path="/checkout" element={<Checkout />} />
-          <Route path="/payment-success" element={<PaymentSuccess />} />
-          <Route path="/payment-failed" element={<PaymentFailed />} />
-        </Routes>
-      </BrowserRouter>
-    </>
-  );
-}
-</file>
-
-<file path="Frontend/src/components/booking/SeatGrid.jsx">
-import Seat from "./Seat";
-
-const SeatGrid = ({
-  totalSeats = 0,
-  bookedSeats = [],
-  lockedSeats = [],
-  selectedSeat,
-  onSeatSelect,
-}) => {
-  const seats = Array.from({ length: totalSeats }, (_, i) => {
-    const seatNumber = i + 1;
-
-    return {
-      number: seatNumber,
-      booked: bookedSeats?.includes(seatNumber),
-      locked: lockedSeats?.some((s) => s.seatNumber === seatNumber),
-    };
-  });
-
-  return (
-    <div className="max-w-5xl mx-auto px-4 pb-15 md:pb-0">
-      <div className="grid grid-cols-6 md:grid-cols-8 lg:grid-cols-12 gap-3">
-        {seats.map((seat) => (
-          <Seat
-            key={seat.number}
-            seat={seat}
-            isSelected={selectedSeat === seat.number}
-            onSeatSelect={onSeatSelect}
-          />
-        ))}
-      </div>
-    </div>
-  );
-};
-
-export default SeatGrid;
+export default router;
 </file>
 
 <file path="Frontend/src/pages/PaymentSuccess.jsx">
@@ -2546,6 +3095,69 @@ export default function PaymentSuccess() {
         </div>
       </div>
     </div>
+  );
+}
+</file>
+
+<file path="Frontend/src/App.jsx">
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+import "./App.css";
+
+/* Pages */
+import LandingPage3D from "./pages/LandingPage3d"; // ✅ NEW: The 3D Master Wrapper
+import BookingPage from "./pages/BookingPage";
+import AdminPage from "./pages/AdminPage";
+import AdminLogin from "./pages/AdminLogin";
+import Checkout from "./pages/Checkout";
+import PaymentSuccess from "./pages/PaymentSuccess";
+import PaymentFailed from "./pages/PaymentFailed";
+
+// Protected Route Wrapper
+const ProtectedAdminRoute = ({ children }) => {
+  const token = localStorage.getItem("adminToken");
+  return token ? children : <Navigate to="/admin-login" replace />;
+};
+
+export default function App() {
+  return (
+    <>
+      <ToastContainer position="top-right" autoClose={1500} />
+
+      <BrowserRouter>
+        <Routes>
+          {/* ✅ REPLACED: The entire landing page is now a 3D WebGL installation */}
+          <Route path="/" element={<LandingPage3D />} />
+
+          {/* Booking System Routes */}
+          <Route
+            path="/booking"
+            element={
+              <div className="bg-mesh min-h-screen">
+                <BookingPage />
+              </div>
+            }
+          />
+
+          {/* Secured Admin Routes */}
+          <Route path="/admin-login" element={<AdminLogin />} />
+          <Route
+            path="/admin"
+            element={
+              <ProtectedAdminRoute>
+                <AdminPage />
+              </ProtectedAdminRoute>
+            }
+          />
+
+          {/* Payment Routes */}
+          <Route path="/checkout" element={<Checkout />} />
+          <Route path="/payment-success" element={<PaymentSuccess />} />
+          <Route path="/payment-failed" element={<PaymentFailed />} />
+        </Routes>
+      </BrowserRouter>
+    </>
   );
 }
 </file>
@@ -2888,6 +3500,79 @@ export const getBookingById = async (req, res) => {
 };
 </file>
 
+<file path="Frontend/src/components/booking/SeatGrid.jsx">
+import Seat from "./Seat";
+
+const SeatGrid = ({
+  totalSeats = 0,
+  bookedSeats = [],
+  lockedSeats = [],
+  selectedSeat,
+  onSeatSelect,
+}) => {
+  // Sacred Geometry Layout Math (Fermat's Spiral)
+  const getFermatCoordinates = (index, total) => {
+    const PHI = (1 + Math.sqrt(5)) / 2; // Golden Ratio
+    const radiusMap = Math.sqrt(index + 0.5) / Math.sqrt(total);
+    const maxRadius = 45; // Leave 5% padding on edges
+    const r = radiusMap * maxRadius;
+    const theta = (2 * Math.PI * index) / (PHI * PHI);
+
+    // Convert polar to cartesian (centered at 50%, 50%)
+    const x = 50 + r * Math.cos(theta);
+    const y = 50 + r * Math.sin(theta);
+    return { x, y };
+  };
+
+  const seats = Array.from({ length: totalSeats }, (_, i) => {
+    const seatNumber = i + 1;
+    const coords = getFermatCoordinates(i, totalSeats);
+
+    return {
+      number: seatNumber,
+      booked: bookedSeats?.includes(seatNumber),
+      locked: lockedSeats?.some((s) => s.seatNumber === seatNumber),
+      x: coords.x,
+      y: coords.y,
+    };
+  });
+
+  return (
+    <div className="w-full max-w-2xl mx-auto py-10 relative">
+      <div className="absolute inset-0 bg-gradient-to-b from-orange-50/50 to-transparent rounded-full blur-3xl -z-10"></div>
+
+      {/* The Circular Container */}
+      <div className="relative w-full aspect-square border-2 border-dashed border-slate-200 rounded-full shadow-inner bg-slate-50">
+        {/* Center Focal Point */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-16 h-16 rounded-full bg-gradient-to-br from-orange-200 to-rose-200 blur-lg opacity-50 z-0"></div>
+
+        {seats.map((seat) => (
+          <div
+            key={seat.number}
+            className="absolute transform -translate-x-1/2 -translate-y-1/2 transition-all duration-700"
+            style={{
+              left: `${seat.x}%`,
+              top: `${seat.y}%`,
+              // Scale down slightly if there are a massive number of seats to prevent overlap
+              width: totalSeats > 30 ? "35px" : "45px",
+              height: totalSeats > 30 ? "35px" : "45px",
+            }}
+          >
+            <Seat
+              seat={seat}
+              isSelected={selectedSeat === seat.number}
+              onSeatSelect={onSeatSelect}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default SeatGrid;
+</file>
+
 <file path="Frontend/src/pages/Checkout.jsx">
 import { useLocation, useNavigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
@@ -3104,164 +3789,6 @@ export default function Checkout() {
 }
 </file>
 
-<file path="Frontend/src/api/api.js">
-import axios from "axios";
-
-/**
- * Axios Instance
- */
-const API = axios.create({
-  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
-  withCredentials: true,
-});
-
-// Automatically attach the token to every request if it exists
-API.interceptors.request.use((config) => {
-  const token = localStorage.getItem("adminToken");
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  return config;
-});
-
-/* =====================================================
-   ADMIN APIs
-===================================================== */
-
-/**
- * Admin Login
- */
-export const adminLoginApi = async (data) => {
-  const res = await API.post("/api/admin/login", data);
-  if (res.data.token) {
-    localStorage.setItem("adminToken", res.data.token);
-    // Attach token to future requests for this session
-    API.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
-  }
-  return res.data;
-};
-
-/**
- * Admin Logout
- */
-export const adminLogoutApi = async () => {
-  const res = await API.post("/api/admin/logout");
-  localStorage.removeItem("adminToken");
-  delete API.defaults.headers.common["Authorization"];
-  return res.data;
-};
-
-/* =====================================================
-   BOOKING APIs
-===================================================== */
-
-/**
- * Lock seat
- */
-export const lockSeatApi = async (data) => {
-  const res = await API.post("/api/bookings/lock-seat", data);
-  return res.data;
-};
-
-/**
- * Unlock seat
- */
-export const unlockSeatApi = async (data) => {
-  const res = await API.post("/api/bookings/unlock-seat", data);
-  return res.data;
-};
-
-/**
- * Create booking
- */
-export const createBookingApi = async (data) => {
-  const res = await API.post("/api/bookings/create-booking", data);
-  return res.data;
-};
-
-/**
- * Confirm booking (after payment success)
- */
-export const confirmBookingApi = async (data) => {
-  const res = await API.post("/api/bookings/confirm-booking", data);
-  return res.data;
-};
-
-/**
- * Cancel booking
- */
-export const cancelBookingApi = async (bookingId) => {
-  const res = await API.post(`/api/bookings/cancel-booking/${bookingId}`);
-  return res.data;
-};
-
-/**
- * Get all bookings (Protected)
- */
-export const getAllBookingsApi = async () => {
-  const res = await API.get("/api/bookings/get-all-bookings");
-  return res.data;
-};
-
-/**
- * Get booking by id
- */
-export const getBookingApi = async (bookingId) => {
-  const res = await API.get(`/api/bookings/${bookingId}`);
-  return res.data;
-};
-
-/* =====================================================
-   PAYMENT APIs
-===================================================== */
-
-/**
- * Create payment order
- */
-export const createPaymentApi = async (data) => {
-  const res = await API.post("/api/payment/create-payment", data);
-  return res.data;
-};
-
-/**
- * Verify payment
- */
-export const verifyPaymentApi = async (data) => {
-  const res = await API.post("/api/payment/verify-payment", data);
-  return res.data;
-};
-
-/* =====================================================
-   SESSION APIs
-===================================================== */
-
-/**
- * Create session (Protected)
- */
-export const createSessionApi = async (data) => {
-  const res = await API.post("/api/session/create-session", data);
-  return res.data;
-};
-
-/**
- * Delete session (Protected)
- */
-export const deleteSessionApi = async (id) => {
-  const res = await API.delete(`/api/session/delete-session/${id}`);
-  return res.data;
-};
-
-/**
- * Get all sessions (Public)
- */
-export const getSessionsApi = async () => {
-  const res = await API.get("/api/session/get-all-session");
-  return res.data;
-};
-
-export default API;
-</file>
-
 <file path="Backend/controllers/payment.controller.js">
 import axios from "axios";
 import Payment from "../models/payment.model.js";
@@ -3467,70 +3994,162 @@ export const verifyPayment = async (req, res) => {
 };
 </file>
 
-<file path="Backend/server.js">
-import express from "express";
-import dotenv from "dotenv";
-import cors from "cors";
-import http from "http"; // ✅ REQUIRED: Node's built-in HTTP module
+<file path="Frontend/src/api/api.js">
+import axios from "axios";
 
-// ✅ REQUIRED: Import your socket initializer
-// (Adjust the path if your socket.js is in a different folder)
-import { initIO } from "./socket/socket.js";
-
-// Import your database connection (Adjust path as needed)
-import connectDB from "./config/db.js";
-
-// Import your routes (Adjust paths as needed to match your files)
-import paymentRoutes from "./routes/payment.route.js";
-import sessionRoutes from "./routes/session.route.js";
-import bookingRoutes from "./routes/booking.route.js";
-import adminRoutes from "./routes/admin.route.js";
-
-// Load environment variables
-dotenv.config();
-
-const app = express();
-
-// 1. Middleware
-app.use(
-  cors({
-    origin: process.env.FRONTEND_URL || "http://localhost:5173",
-    credentials: true, // Crucial for sockets and cookies
-  }),
-);
-app.use(express.json());
-
-// 2. Wrap Express with the HTTP Server
-const server = http.createServer(app);
-
-// 3. Initialize Socket.io BEFORE defining routes
-initIO(server);
-
-// 4. API Routes
-app.use("/api/payment", paymentRoutes);
-app.use("/api/sessions", sessionRoutes);
-app.use("/api/bookings", bookingRoutes);
-app.use("/api/admin", adminRoutes);
-
-// Health check route
-app.get("/", (req, res) => {
-  res.send("Divine Vikas API is running...");
+/**
+ * Axios Instance
+ */
+const API = axios.create({
+  baseURL: import.meta.env.VITE_API_URL || "http://localhost:5000",
+  withCredentials: true,
 });
 
-// 5. Connect Database and Start Server
-const PORT = process.env.PORT || 5001;
+// Automatically attach the token to every request if it exists
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("adminToken");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
 
-connectDB()
-  .then(() => {
-    // ✅ CRITICAL: Call .listen on 'server', NOT 'app'
-    server.listen(PORT, () => {
-      console.log(`🚀 Server running on port ${PORT}`);
-    });
-  })
-  .catch((error) => {
-    console.error("Database connection failed:", error);
-    process.exit(1);
-  });
+/* =====================================================
+   ADMIN APIs
+===================================================== */
+
+/**
+ * Admin Login
+ */
+export const adminLoginApi = async (data) => {
+  const res = await API.post("/api/admin/login", data);
+  if (res.data.token) {
+    localStorage.setItem("adminToken", res.data.token);
+    // Attach token to future requests for this session
+    API.defaults.headers.common["Authorization"] = `Bearer ${res.data.token}`;
+  }
+  return res.data;
+};
+
+/**
+ * Admin Logout
+ */
+export const adminLogoutApi = async () => {
+  const res = await API.post("/api/admin/logout");
+  localStorage.removeItem("adminToken");
+  delete API.defaults.headers.common["Authorization"];
+  return res.data;
+};
+
+/* =====================================================
+   BOOKING APIs
+===================================================== */
+
+/**
+ * Lock seat
+ */
+export const lockSeatApi = async (data) => {
+  const res = await API.post("/api/bookings/lock-seat", data);
+  return res.data;
+};
+
+/**
+ * Unlock seat
+ */
+export const unlockSeatApi = async (data) => {
+  const res = await API.post("/api/bookings/unlock-seat", data);
+  return res.data;
+};
+
+/**
+ * Create booking
+ */
+export const createBookingApi = async (data) => {
+  const res = await API.post("/api/bookings/create-booking", data);
+  return res.data;
+};
+
+/**
+ * Confirm booking (after payment success)
+ */
+export const confirmBookingApi = async (data) => {
+  const res = await API.post("/api/bookings/confirm-booking", data);
+  return res.data;
+};
+
+/**
+ * Cancel booking
+ */
+export const cancelBookingApi = async (bookingId) => {
+  const res = await API.post(`/api/bookings/cancel-booking/${bookingId}`);
+  return res.data;
+};
+
+/**
+ * Get all bookings (Protected)
+ */
+export const getAllBookingsApi = async () => {
+  const res = await API.get("/api/bookings/get-all-bookings");
+  return res.data;
+};
+
+/**
+ * Get booking by id
+ */
+export const getBookingApi = async (bookingId) => {
+  const res = await API.get(`/api/bookings/${bookingId}`);
+  return res.data;
+};
+
+/* =====================================================
+   PAYMENT APIs
+===================================================== */
+
+/**
+ * Create payment order
+ */
+export const createPaymentApi = async (data) => {
+  const res = await API.post("/api/payment/create-payment", data);
+  return res.data;
+};
+
+/**
+ * Verify payment
+ */
+export const verifyPaymentApi = async (data) => {
+  const res = await API.post("/api/payment/verify-payment", data);
+  return res.data;
+};
+
+/* =====================================================
+   SESSION APIs
+===================================================== */
+
+/**
+ * Create session (Protected)
+ */
+export const createSessionApi = async (data) => {
+  const res = await API.post("/api/session/create-session", data);
+  return res.data;
+};
+
+/**
+ * Delete session (Protected)
+ */
+export const deleteSessionApi = async (id) => {
+  const res = await API.delete(`/api/session/delete-session/${id}`);
+  return res.data;
+};
+
+/**
+ * Get all sessions (Public)
+ */
+export const getSessionsApi = async () => {
+  const res = await API.get("/api/session/get-all-session");
+  return res.data;
+};
+
+export default API;
 </file>
 
 <file path="Frontend/src/pages/AdminPage.jsx">
@@ -4248,6 +4867,67 @@ const AdminPage = () => {
 };
 
 export default AdminPage;
+</file>
+
+<file path="Backend/server.js">
+import express from "express";
+import dotenv from "dotenv";
+import cors from "cors";
+import http from "http";
+
+import { initIO } from "./socket/socket.js";
+import connectDB from "./config/db.js";
+
+import paymentRoutes from "./routes/payment.route.js";
+import sessionRoutes from "./routes/session.route.js";
+import bookingRoutes from "./routes/booking.route.js";
+import adminRoutes from "./routes/admin.route.js";
+
+dotenv.config();
+
+const app = express();
+
+// 1. Middleware
+app.use(
+  cors({
+    origin: process.env.FRONTEND_URL || "http://localhost:5173",
+    credentials: true, // Crucial for sockets and cookies
+  }),
+);
+app.use(express.json());
+
+// 2. Wrap Express with the HTTP Server
+const server = http.createServer(app);
+
+// 3. Initialize Socket.io BEFORE defining routes
+initIO(server);
+
+// 4. API Routes
+app.use("/api/payment", paymentRoutes);
+// ✅ FIX: Changed from "/api/sessions" to "/api/session" to match frontend
+app.use("/api/session", sessionRoutes);
+app.use("/api/bookings", bookingRoutes);
+app.use("/api/admin", adminRoutes);
+
+// Health check route
+app.get("/", (req, res) => {
+  res.send("Divine Vikas API is running...");
+});
+
+// 5. Connect Database and Start Server
+const PORT = process.env.PORT || 5001;
+
+connectDB()
+  .then(() => {
+    // Call .listen on 'server', NOT 'app'
+    server.listen(PORT, () => {
+      console.log(`🚀 Server running on port ${PORT}`);
+    });
+  })
+  .catch((error) => {
+    console.error("Database connection failed:", error);
+    process.exit(1);
+  });
 </file>
 
 <file path="Frontend/.env">

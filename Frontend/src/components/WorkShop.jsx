@@ -1,10 +1,7 @@
 import { motion } from "framer-motion";
 import { Sparkles, ArrowRight } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 export default function WorkShop() {
-  const navigate = useNavigate();
-
   return (
     <section className="py-20 relative z-10">
       <div className="max-w-7xl mx-auto px-4">
@@ -49,7 +46,7 @@ export default function WorkShop() {
             </div>
 
             <button
-              onClick={() => navigate("/booking")}
+              onClick={() => (window.location.href = "/booking")} // ✅ FIXED
               className="w-full bg-slate-900 hover:bg-slate-800 text-white rounded-2xl py-5 px-6 text-xl font-bold transition-all shadow-xl shadow-slate-900/20 flex items-center justify-center gap-3 group relative z-10"
             >
               SECURE YOUR SEAT

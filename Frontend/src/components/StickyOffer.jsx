@@ -1,17 +1,15 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import { Timer } from "lucide-react";
 
 export default function StickyOffer() {
   const [showBar, setShowBar] = useState(false);
   const [timeLeft, setTimeLeft] = useState(300);
-  const navigate = useNavigate();
 
+  // Show bar automatically after 3 seconds of being on the page
   useEffect(() => {
-    const handleScroll = () => setShowBar(window.scrollY > 300);
-    window.addEventListener("scroll", handleScroll);
-    return () => window.removeEventListener("scroll", handleScroll);
+    const timer = setTimeout(() => setShowBar(true), 3000);
+    return () => clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -34,8 +32,7 @@ export default function StickyOffer() {
           exit={{ y: 100, opacity: 0 }}
           className="fixed bottom-6 left-0 right-0 z-50 flex justify-center px-4 pointer-events-none"
         >
-          {/* The Glass Pill */}
-          <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 flex flex-col md:flex-row items-center gap-4 md:gap-8 shadow-2xl border border-white/60">
+          <div className="glass-panel pointer-events-auto rounded-full px-6 py-3 flex flex-col md:flex-row items-center gap-4 md:gap-8 shadow-2xl border border-white/60 bg-white/70">
             <div className="flex items-center gap-4">
               <div className="flex flex-col items-end">
                 <span className="text-xs text-slate-500 font-bold uppercase tracking-wider line-through">
@@ -55,7 +52,7 @@ export default function StickyOffer() {
             </div>
 
             <button
-              onClick={() => navigate("/booking")}
+              onClick={() => (window.location.href = "/booking")} // ✅ FIXED
               className="bg-gradient-to-r from-orange-500 to-rose-500 hover:from-orange-600 hover:to-rose-600 text-white px-8 py-3 rounded-full font-bold shadow-lg transition-transform hover:scale-105 active:scale-95 text-sm md:text-base whitespace-nowrap"
             >
               Book Healing Session

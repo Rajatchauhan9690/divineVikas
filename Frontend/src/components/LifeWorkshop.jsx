@@ -1,5 +1,4 @@
-import { useRef } from "react";
-import { motion, useScroll, useSpring } from "framer-motion";
+import { motion } from "framer-motion";
 
 export default function LifeWorkshop() {
   const items = [
@@ -30,20 +29,9 @@ export default function LifeWorkshop() {
     },
   ];
 
-  // Engine for the Scroll-Linked SVG Animation
-  const sectionRef = useRef(null);
-  const { scrollYProgress } = useScroll({
-    target: sectionRef,
-    offset: ["start center", "end center"],
-  });
-
-  // Spring physics makes the line drawing feel fluid rather than robotic
-  const drawLength = useSpring(scrollYProgress, { stiffness: 90, damping: 20 });
-
   return (
-    <section ref={sectionRef} className="py-24 relative z-10 overflow-hidden">
+    <section className="py-24 relative z-10 overflow-hidden">
       <div className="max-w-7xl mx-auto px-4 relative">
-        {/* Animated Heading */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           whileInView={{ opacity: 1, y: 0 }}
@@ -61,11 +49,9 @@ export default function LifeWorkshop() {
           </p>
         </motion.div>
 
-        {/* The Timeline Container */}
         <div className="relative max-w-4xl mx-auto">
-          {/* ================= THE SVG DRAWING ENGINE ================= */}
+          {/* ✅ OPTIMIZED: The SVG line now animates automatically when it enters the screen, avoiding the heavy scroll-listener conflict */}
           <div className="absolute left-8 md:left-1/2 top-0 bottom-0 w-2 md:-ml-1 z-0">
-            {/* Background static line (faint) */}
             <svg
               className="absolute w-full h-full"
               preserveAspectRatio="none"
@@ -82,8 +68,6 @@ export default function LifeWorkshop() {
                 vectorEffect="non-scaling-stroke"
               />
             </svg>
-
-            {/* Animated foreground line (glowing orange) */}
             <svg
               className="absolute w-full h-full"
               preserveAspectRatio="none"
@@ -97,7 +81,10 @@ export default function LifeWorkshop() {
                 stroke="url(#gradient-line)"
                 strokeWidth="4"
                 strokeLinecap="round"
-                style={{ pathLength: drawLength }}
+                initial={{ pathLength: 0 }}
+                whileInView={{ pathLength: 1 }}
+                transition={{ duration: 2, ease: "easeOut" }}
+                viewport={{ once: true, margin: "-10%" }}
                 vectorEffect="non-scaling-stroke"
                 className="drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]"
               />
@@ -110,7 +97,6 @@ export default function LifeWorkshop() {
             </svg>
           </div>
 
-          {/* Timeline Nodes */}
           <div className="space-y-16 md:space-y-24">
             {items.map((item, index) => {
               const isEven = index % 2 === 0;
@@ -119,7 +105,6 @@ export default function LifeWorkshop() {
                   key={index}
                   className={`relative flex items-center md:justify-between flex-col md:flex-row ${isEven ? "md:flex-row-reverse" : ""}`}
                 >
-                  {/* Glowing Node on the line */}
                   <motion.div
                     initial={{ scale: 0, opacity: 0 }}
                     whileInView={{ scale: 1, opacity: 1 }}
@@ -128,10 +113,8 @@ export default function LifeWorkshop() {
                     className="absolute left-8 md:left-1/2 w-6 h-6 rounded-full bg-gradient-to-r from-orange-500 to-rose-500 shadow-[0_0_15px_rgba(249,115,22,0.6)] transform -translate-x-1/2 z-10 border-4 border-white"
                   ></motion.div>
 
-                  {/* Empty space for alternating layout */}
                   <div className="hidden md:block w-[45%]"></div>
 
-                  {/* Glass Content Card */}
                   <motion.div
                     initial={{ opacity: 0, x: isEven ? 50 : -50 }}
                     whileInView={{ opacity: 1, x: 0 }}
@@ -140,23 +123,6 @@ export default function LifeWorkshop() {
                     className="w-full pl-20 md:pl-0 md:w-[45%] group"
                   >
                     <div className="glass-panel rounded-3xl p-8 hover:bg-white/60 transition-colors duration-300 relative overflow-hidden">
-                      {/* Decorative SVG flourish drawing inside the card */}
-                      <svg
-                        className="absolute top-0 right-0 w-32 h-32 opacity-10 pointer-events-none"
-                        viewBox="0 0 100 100"
-                      >
-                        <motion.path
-                          initial={{ pathLength: 0 }}
-                          whileInView={{ pathLength: 1 }}
-                          transition={{ duration: 1.5, delay: 0.3 }}
-                          viewport={{ once: true }}
-                          d="M 10 90 Q 50 10 90 90"
-                          fill="transparent"
-                          stroke="#f97316"
-                          strokeWidth="2"
-                        />
-                      </svg>
-
                       <div className="bg-white/90 rounded-2xl w-20 h-20 p-4 mb-6 shadow-sm border border-orange-100 group-hover:scale-110 transition-transform duration-500">
                         <img
                           src={item.icon}
@@ -164,11 +130,9 @@ export default function LifeWorkshop() {
                           className="w-full h-full object-contain"
                         />
                       </div>
-
                       <h3 className="text-2xl font-serif font-bold text-slate-900 mb-3 group-hover:text-orange-600 transition-colors">
                         {item.title}
                       </h3>
-
                       <p className="text-slate-600 leading-relaxed font-sans text-lg">
                         {item.desc}
                       </p>

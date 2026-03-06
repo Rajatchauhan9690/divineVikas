@@ -1,24 +1,12 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import Particles, { initParticlesEngine } from "@tsparticles/react";
-import { loadSlim } from "@tsparticles/slim";
 import { Users } from "lucide-react";
+import EnergyCore from "./EnergyCore";
 
 export default function Hero() {
-  const navigate = useNavigate();
   const [timeLeft, setTimeLeft] = useState(300);
-  const [init, setInit] = useState(false);
   const [liveSouls, setLiveSouls] = useState(42);
-
-  // Initialize Particle Engine
-  useEffect(() => {
-    initParticlesEngine(async (engine) => {
-      await loadSlim(engine);
-    }).then(() => {
-      setInit(true);
-    });
-  }, []);
 
   // Countdown Timer
   useEffect(() => {
@@ -27,7 +15,7 @@ export default function Hero() {
     return () => clearInterval(interval);
   }, [timeLeft]);
 
-  // Simulate live presence shifting naturally
+  // Simulate live presence
   useEffect(() => {
     const interval = setInterval(() => {
       setLiveSouls((prev) => {
@@ -41,65 +29,17 @@ export default function Hero() {
   const minutes = String(Math.floor(timeLeft / 60)).padStart(2, "0");
   const seconds = String(timeLeft % 60).padStart(2, "0");
 
-  // Framer Motion Variants for Staggered Reveal
   const listContainer = {
     hidden: { opacity: 0 },
-    show: {
-      opacity: 1,
-      transition: { staggerChildren: 0.15 },
-    },
+    show: { opacity: 1, transition: { staggerChildren: 0.15 } },
   };
-
   const listItem = {
     hidden: { opacity: 0, x: -20 },
     show: { opacity: 1, x: 0, transition: { type: "spring", stiffness: 100 } },
   };
 
-  const particleOptions = useMemo(
-    () => ({
-      background: { color: { value: "transparent" } },
-      fpsLimit: 60,
-      interactivity: {
-        events: {
-          onHover: { enable: true, mode: "repulse" },
-        },
-        modes: { repulse: { distance: 100, duration: 0.4 } },
-      },
-      particles: {
-        color: { value: ["#f97316", "#14b8a6", "#a855f7"] },
-        links: {
-          enable: true,
-          color: "#cbd5e1",
-          distance: 150,
-          opacity: 0.2,
-          width: 1,
-        },
-        move: {
-          enable: true,
-          direction: "none",
-          random: true,
-          speed: 0.6,
-          straight: false,
-        },
-        number: { density: { enable: true, area: 800 }, value: 40 },
-        opacity: { value: 0.3 },
-        shape: { type: "circle" },
-        size: { value: { min: 1, max: 3 } },
-      },
-      detectRetina: true,
-    }),
-    [],
-  );
-
   return (
-    <section className="relative w-full overflow-hidden bg-gradient-to-br from-slate-50 to-orange-50/30">
-      {/* Background Particles */}
-      {init && (
-        <div className="absolute inset-0 z-0 opacity-60">
-          <Particles id="tsparticles" options={particleOptions} />
-        </div>
-      )}
-
+    <section className="relative w-full overflow-hidden">
       {/* Social Proof Pulse Indicator */}
       <motion.div
         initial={{ y: -100, opacity: 0 }}
@@ -117,7 +57,7 @@ export default function Hero() {
         </span>
       </motion.div>
 
-      {/* ================= HERO TOP BANNER ================= */}
+      {/* TOP BANNER */}
       <div className="relative z-10 bg-orange-500/90 backdrop-blur-sm text-white text-center rounded-b-3xl px-4 py-5 mx-4 md:mx-10 shadow-lg border border-orange-400/50">
         <h1 className="text-[16px] leading-tight font-serif font-bold md:text-4xl md:leading-snug max-w-3xl mx-auto">
           One Day Whole Body Healing Master Class
@@ -127,9 +67,8 @@ export default function Hero() {
         </p>
       </div>
 
-      {/* ================= MAIN CONTENT ================= */}
       <div className="relative z-10 px-4 py-16 space-y-20">
-        {/* ===== Heading Section ===== */}
+        {/* Heading Section */}
         <motion.div
           initial={{ opacity: 0, y: 30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -146,33 +85,26 @@ export default function Hero() {
             </span>
           </h2>
           <p className="mt-6 text-gray-600 text-sm md:text-lg font-light">
-            Using the energy of <strong>Cosmos,</strong>{" "}
-            <strong>You and Me.</strong>
+            Using the energy of <strong>Cosmos, You and Me.</strong>
           </p>
         </motion.div>
 
-        {/* ===== Image + Benefits Section ===== */}
+        {/* 3D Core + Benefits Section */}
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-12 items-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             whileInView={{ opacity: 1, scale: 1 }}
             viewport={{ once: true }}
-            className="rounded-3xl overflow-hidden w-full shadow-2xl relative"
+            className="rounded-3xl overflow-hidden w-full h-[400px] md:h-[500px] shadow-2xl relative border border-slate-700/50 flex items-center justify-center bg-slate-950"
           >
-            <div className="absolute inset-0 bg-gradient-to-t from-black/40 to-transparent z-10"></div>
-            <img
-              src="/Images/myphoto.png"
-              alt="Workshop Video"
-              loading="lazy"
-              className="w-full h-full object-cover"
-            />
+            <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,rgba(234,88,12,0.2)_0%,transparent_70%)] pointer-events-none z-0"></div>
+            <EnergyCore />
           </motion.div>
 
           <div className="bg-white/40 backdrop-blur-xl border border-white/50 p-6 md:p-10 rounded-3xl shadow-xl">
             <h3 className="text-2xl font-serif font-bold text-slate-900 mb-8">
               What You Will Experience
             </h3>
-
             <motion.ul
               variants={listContainer}
               initial="hidden"
@@ -204,7 +136,7 @@ export default function Hero() {
           </div>
         </div>
 
-        {/* ===== Profile + CTA Section ===== */}
+        {/* Profile + CTA Section */}
         <div className="max-w-6xl mx-auto grid md:grid-cols-2 gap-10 items-center">
           <motion.div
             initial={{ opacity: 0, x: -30 }}
@@ -232,7 +164,6 @@ export default function Hero() {
             </div>
           </motion.div>
 
-          {/* Right CTA */}
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
             whileInView={{ opacity: 1, scale: 1 }}
@@ -243,11 +174,10 @@ export default function Hero() {
               whileHover={{ scale: 1.03 }}
               whileTap={{ scale: 0.97 }}
               className="w-full bg-gradient-to-r from-orange-500 to-rose-500 text-white py-5 rounded-2xl text-xl font-bold shadow-lg shadow-orange-500/30 border border-orange-400/50"
-              onClick={() => navigate("/booking")}
+              onClick={() => (window.location.href = "/booking")}
             >
               SECURE YOUR SPOT
             </motion.button>
-
             <div className="flex justify-center gap-6 pt-4">
               <div className="bg-white/80 rounded-2xl px-6 py-4 w-28 shadow-sm border border-slate-100">
                 <p className="text-3xl font-bold text-slate-800">{minutes}</p>

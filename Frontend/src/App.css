@@ -96,3 +96,23 @@
   border: 1px solid rgba(255, 255, 255, 0.6);
   box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.07);
 }
+
+/* ================== 3D OVERLAY OVERRIDES ================== */
+/* This strips the solid backgrounds off your sections so the 3D tunnel is visible */
+.holographic-overlay section {
+  background-color: transparent !important;
+  background-image: none !important;
+}
+
+/* Ensure the scroll container works smoothly on mobile */
+.holographic-overlay {
+  position: relative;
+  width: 100vw;
+  overflow-x: hidden;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}

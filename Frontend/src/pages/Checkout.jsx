@@ -1,5 +1,7 @@
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, Navigate } from "react-router-dom";
 import { useEffect, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ArrowLeft, CheckCircle2, Lock, Sparkles } from "lucide-react";
 import { createPaymentApi, createBookingApi } from "../api/api";
 import { load } from "@cashfreepayments/cashfree-js";
 import { toast } from "react-toastify";
@@ -8,22 +10,20 @@ export default function Checkout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  console.log("Location State:", location.state);
+  // If someone tries to access /checkout directly without selecting a seat, send them back
+  if (!location.state) {
+    return <Navigate to="/booking" replace />;
+  }
 
-  const sessionId = location.state?.sessionId;
-  const seatNumber = location.state?.seatNumber || "";
-  const amount = location.state?.amount || 0;
-  const organizerName = location.state?.organizerName || "Organizer";
-  const slotTime = location.state?.slotTime || "N/A";
-
-  console.log("SessionId:", sessionId);
-  console.log("SeatNumber:", seatNumber);
-  console.log("Amount:", amount);
+  const { sessionId, seatNumber, amount, organizerName, slotTime } =
+    location.state;
 
   const cashfreeRef = useRef(null);
   const paymentLock = useRef(false);
 
   const [loading, setLoading] = useState(false);
+  const [step, setStep] = useState(1); // 1: Name, 2: Email, 3: Phone, 4: Payment
+  const [error, setError] = useState("");
 
   const [form, setForm] = useState({
     name: "",
@@ -31,52 +31,60 @@ export default function Checkout() {
     phone: "",
   });
 
-  // Load Cashfree SDK
+  // Load Cashfree SDK in the background
   useEffect(() => {
-    console.log("Loading Cashfree SDK...");
-
     load({ mode: "sandbox" }).then((cf) => {
-      console.log("Cashfree SDK Loaded:", cf);
       cashfreeRef.current = cf;
     });
   }, []);
 
-  const handleChange = (e) => {
-    const { name, value } = e.target;
-
-    console.log("Input Changed:", name, value);
-
-    setForm({
-      ...form,
-      [name]: value,
-    });
+  // Validation & Progression Logic
+  const handleNext = () => {
+    setError("");
+    if (step === 1 && form.name.trim().length < 2) {
+      setError("Please enter your full name.");
+      return;
+    }
+    if (step === 2 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.email)) {
+      setError("Please enter a valid email address.");
+      return;
+    }
+    if (step === 3 && form.phone.replace(/\D/g, "").length < 10) {
+      setError("Please enter a valid 10-digit phone number.");
+      return;
+    }
+    setStep((prev) => prev + 1);
   };
 
+  const handleBack = () => {
+    setError("");
+    if (step > 1) setStep((prev) => prev - 1);
+    else navigate("/booking"); // Go back to seat selection
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      handleNext();
+    }
+  };
+
+  // Final Payment Execution
   const handlePayment = async () => {
-    console.log("Payment Button Clicked");
-
-    if (!form.name || !form.email || !form.phone) {
-      toast.error("Fill all customer details");
-      return;
-    }
-
     if (!cashfreeRef.current) {
-      console.log("Cashfree SDK not ready");
+      toast.error("Payment system initializing, please wait a second.");
       return;
     }
 
-    if (paymentLock.current) {
-      console.log("Payment already processing");
-      return;
-    }
+    if (paymentLock.current) return;
 
     paymentLock.current = true;
     setLoading(true);
 
     try {
-      // Clean phone number
       const cleanPhone = form.phone.replace(/^0+/, "");
 
+      // 1. Create Booking in Database
       const bookingPayload = {
         sessionId,
         seatNumber,
@@ -86,40 +94,23 @@ export default function Checkout() {
         customerPhone: cleanPhone,
       };
 
-      console.log("Booking Payload:", bookingPayload);
-
       const bookingRes = await createBookingApi(bookingPayload);
+      if (!bookingRes?.bookingId) throw new Error("Booking creation failed");
 
-      console.log("Booking API Response:", bookingRes);
-
-      if (!bookingRes?.bookingId) {
-        throw new Error("Booking creation failed");
-      }
-
-      const bookingId = bookingRes.bookingId;
-
-      console.log("Booking ID:", bookingId);
-
+      // 2. Initialize Payment Session
       const paymentPayload = {
-        bookingId,
+        bookingId: bookingRes.bookingId,
         amount,
         customerName: form.name,
         customerEmail: form.email,
         customerPhone: cleanPhone,
       };
 
-      console.log("Payment Payload:", paymentPayload);
-
       const paymentRes = await createPaymentApi(paymentPayload);
-
-      console.log("Payment API Response:", paymentRes);
-
-      if (!paymentRes?.payment_session_id) {
+      if (!paymentRes?.payment_session_id)
         throw new Error("Payment initialization failed");
-      }
 
-      console.log("Starting Cashfree Checkout");
-
+      // 3. Trigger Cashfree Popup
       await cashfreeRef.current.checkout({
         paymentSessionId: paymentRes.payment_session_id,
         redirectTarget: "_self",
@@ -128,85 +119,221 @@ export default function Checkout() {
       console.error("Payment Error:", error);
       navigate("/payment-failed");
     } finally {
-      console.log("Resetting payment state");
-
       setLoading(false);
       paymentLock.current = false;
     }
   };
 
+  // Animation variants for smooth transitions
+  const fadeVariants = {
+    initial: { opacity: 0, y: 20 },
+    animate: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5, ease: "easeOut" },
+    },
+    exit: { opacity: 0, y: -20, transition: { duration: 0.3 } },
+  };
+
   return (
-    <div className="min-h-screen flex justify-center items-center bg-gray-100 p-4">
-      <div className="w-full max-w-5xl bg-white shadow-xl rounded-2xl flex flex-col md:flex-row overflow-hidden">
-        {/* Booking Info */}
-        <div className="md:w-1/2 bg-orange-50 p-6 space-y-3">
-          <h2 className="text-2xl font-bold text-orange-600 text-center">
-            Booking Details
-          </h2>
+    <div className="min-h-screen flex flex-col justify-center items-center relative overflow-hidden bg-slate-950 text-white selection:bg-orange-500 selection:text-white">
+      {/* Immersive Dark Background Orbs */}
+      <div className="absolute top-[-20%] left-[-10%] w-[60vw] h-[60vw] bg-orange-500/10 rounded-full blur-[150px] pointer-events-none" />
+      <div className="absolute bottom-[-20%] right-[-10%] w-[60vw] h-[60vw] bg-rose-500/10 rounded-full blur-[150px] pointer-events-none" />
 
-          <p>
-            <strong>Organizer:</strong> {organizerName}
-          </p>
-          <p>
-            <strong>Slot Time:</strong> {slotTime}
-          </p>
-          <p>
-            <strong>Seat No:</strong> {seatNumber}
-          </p>
+      {/* Top Progress Bar */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-slate-800">
+        <motion.div
+          className="h-full bg-gradient-to-r from-orange-500 to-rose-500"
+          initial={{ width: "0%" }}
+          animate={{ width: `${(step / 4) * 100}%` }}
+          transition={{ ease: "easeInOut", duration: 0.5 }}
+        />
+      </div>
 
-          <div className="pt-3 border-t">
-            <p className="text-sm text-gray-500">Seat Price</p>
-            <p className="text-xl font-bold text-green-600">₹{amount}</p>
-          </div>
+      {/* Navigation Header */}
+      <div className="absolute top-8 left-8 right-8 flex justify-between items-center z-50">
+        <button
+          onClick={handleBack}
+          className="text-slate-400 hover:text-white transition-colors flex items-center gap-2 text-sm font-medium"
+        >
+          <ArrowLeft size={16} /> {step === 1 ? "Cancel Booking" : "Back"}
+        </button>
+        <div className="flex items-center gap-2 text-slate-400 text-sm">
+          <Lock size={14} /> Secure Checkout
         </div>
+      </div>
 
-        {/* Customer Form */}
-        <div className="md:w-1/2 p-6 flex flex-col justify-center">
-          <h2 className="text-xl font-semibold text-center mb-6">
-            Customer Details
-          </h2>
+      {/* Main Conversational Area */}
+      <div className="w-full max-w-2xl px-6 relative z-10">
+        <AnimatePresence mode="wait">
+          {/* STEP 1: NAME */}
+          {step === 1 && (
+            <motion.div
+              key="step1"
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex flex-col gap-6"
+            >
+              <h1 className="text-3xl md:text-5xl font-serif font-light text-slate-200">
+                What is your name?
+              </h1>
+              <input
+                autoFocus
+                type="text"
+                placeholder="Enter your full name"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent border-b-2 border-slate-700 text-3xl md:text-4xl py-4 focus:outline-none focus:border-orange-500 transition-colors placeholder:text-slate-700"
+              />
+            </motion.div>
+          )}
 
-          <div className="space-y-4">
-            <input
-              name="name"
-              placeholder="Full Name"
-              value={form.name}
-              onChange={handleChange}
-              className="w-full border p-2 rounded"
-            />
+          {/* STEP 2: EMAIL */}
+          {step === 2 && (
+            <motion.div
+              key="step2"
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex flex-col gap-6"
+            >
+              <h1 className="text-3xl md:text-5xl font-serif font-light text-slate-200 leading-tight">
+                Beautiful. Where should we send your access link,{" "}
+                <span className="text-orange-400 font-bold">
+                  {form.name.split(" ")[0]}
+                </span>
+                ?
+              </h1>
+              <input
+                autoFocus
+                type="email"
+                placeholder="hello@example.com"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent border-b-2 border-slate-700 text-3xl md:text-4xl py-4 focus:outline-none focus:border-orange-500 transition-colors placeholder:text-slate-700"
+              />
+            </motion.div>
+          )}
 
-            <input
-              name="email"
-              type="email"
-              placeholder="Email"
-              value={form.email}
-              onChange={handleChange}
-              className="w-full border p-2 rounded"
-            />
+          {/* STEP 3: PHONE */}
+          {step === 3 && (
+            <motion.div
+              key="step3"
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex flex-col gap-6"
+            >
+              <h1 className="text-3xl md:text-5xl font-serif font-light text-slate-200">
+                And your WhatsApp number for a gentle reminder?
+              </h1>
+              <input
+                autoFocus
+                type="tel"
+                maxLength={10}
+                placeholder="10-digit mobile number"
+                value={form.phone}
+                onChange={(e) =>
+                  setForm({ ...form, phone: e.target.value.replace(/\D/g, "") })
+                }
+                onKeyDown={handleKeyDown}
+                className="w-full bg-transparent border-b-2 border-slate-700 text-3xl md:text-4xl py-4 focus:outline-none focus:border-orange-500 transition-colors placeholder:text-slate-700"
+              />
+            </motion.div>
+          )}
 
-            <input
-              name="phone"
-              placeholder="Phone Number"
-              maxLength={10}
-              value={form.phone}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, "");
-                setForm({ ...form, phone: value });
-              }}
-              className="w-full border p-2 rounded"
-            />
+          {/* STEP 4: REVIEW & PAY */}
+          {step === 4 && (
+            <motion.div
+              key="step4"
+              variants={fadeVariants}
+              initial="initial"
+              animate="animate"
+              exit="exit"
+              className="flex flex-col items-center text-center"
+            >
+              <Sparkles className="text-orange-500 w-12 h-12 mb-6" />
+              <h1 className="text-3xl md:text-4xl font-serif font-bold text-white mb-2">
+                Your sanctuary awaits.
+              </h1>
+              <p className="text-slate-400 mb-10">
+                Review your details and secure your energy exchange.
+              </p>
+
+              {/* Glass Ticket Summary */}
+              <div className="w-full bg-white/5 backdrop-blur-md border border-white/10 rounded-3xl p-6 text-left mb-8 shadow-2xl">
+                <div className="flex justify-between items-end border-b border-white/10 pb-6 mb-6">
+                  <div>
+                    <p className="text-xs text-slate-400 uppercase tracking-widest mb-1">
+                      Session
+                    </p>
+                    <p className="text-xl font-bold">{slotTime}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400 uppercase tracking-widest mb-1">
+                      Seat
+                    </p>
+                    <p className="text-xl font-bold text-emerald-400">
+                      No. {seatNumber}
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <CheckCircle2 size={16} className="text-orange-500" />{" "}
+                    {form.name}
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <CheckCircle2 size={16} className="text-orange-500" />{" "}
+                    {form.email}
+                  </div>
+                  <div className="flex items-center gap-3 text-slate-300">
+                    <CheckCircle2 size={16} className="text-orange-500" /> +91{" "}
+                    {form.phone}
+                  </div>
+                </div>
+              </div>
+
+              {/* Payment Button */}
+              <button
+                onClick={handlePayment}
+                disabled={loading}
+                className={`relative overflow-hidden w-full bg-gradient-to-r from-orange-500 to-rose-500 text-white py-5 rounded-2xl text-xl font-bold shadow-[0_0_40px_rgba(249,115,22,0.3)] transition-all hover:scale-[1.02] active:scale-[0.98] flex items-center justify-center gap-3 ${loading ? "opacity-70 cursor-not-allowed" : ""}`}
+              >
+                <div className="absolute inset-0 -translate-x-full hover:animate-[shimmer_1.5s_infinite] bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-12" />
+                {loading ? (
+                  <>
+                    <div className="w-6 h-6 border-4 border-white border-t-transparent rounded-full animate-spin" />
+                    <span>Processing...</span>
+                  </>
+                ) : (
+                  <span>PAY ₹{amount} SECURELY</span>
+                )}
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Error Message & Advance Button (Only for Steps 1-3) */}
+        {step < 4 && (
+          <div className="mt-8 flex flex-col md:flex-row items-center justify-between gap-4">
+            <p className="text-rose-500 font-medium h-6">{error}</p>
 
             <button
-              onClick={handlePayment}
-              disabled={loading}
-              className={`w-full p-3 rounded text-white font-medium transition ${
-                loading ? "bg-gray-400" : "bg-orange-500 hover:bg-orange-600"
-              }`}
+              onClick={handleNext}
+              className="bg-white text-slate-950 px-8 py-3 rounded-full font-bold shadow-lg hover:bg-slate-200 transition-colors flex items-center gap-2"
             >
-              {loading ? "Processing..." : `Pay ₹${amount}`}
+              Press Enter <span className="text-xl">↵</span>
             </button>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
